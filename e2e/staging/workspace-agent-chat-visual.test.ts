@@ -7,15 +7,18 @@ import { makeTestUser, signUpAndOnboard, type TestUser } from './helpers'
 /**
  * Tagged mobile visual baselines for the staged Workspace Agent Chat rollout.
  *
- * Run against a target explicitly configured with `mobileAgentShell=true` and
- * workspace runtimes available:
+ * Run against a target with a personal workspace and workspace runtimes
+ * available:
  *   E2E_MOBILE_AGENT_SHELL=true E2E_TARGET_URL=... \
  *   npx playwright test --config e2e/playwright.config.ts workspace-agent-chat-visual
+ *
+ * `E2E_MOBILE_AGENT_SHELL` only opts this visual suite in; it does not
+ * configure the target's mobile shell.
  *
  * Generate accepted images with `--update-snapshots`; filenames deliberately
  * keep the Muse reference tag used during visual review.
  */
-const MOBILE_AGENT_SHELL_ENABLED =
+const MOBILE_VISUALS_ENABLED =
   process.env.E2E_MOBILE_AGENT_SHELL === 'true'
 const TEST_USER: TestUser = makeTestUser('WorkspaceAgentChatVisual')
 
@@ -35,8 +38,8 @@ async function openWorkspaceAgentChat(page: Page, user: TestUser) {
 
 test.describe('Workspace Agent Chat Muse visual baselines', () => {
   test.skip(
-    !MOBILE_AGENT_SHELL_ENABLED,
-    'requires an explicit mobileAgentShell-enabled E2E target',
+    !MOBILE_VISUALS_ENABLED,
+    'requires an explicitly enabled mobile visual E2E run',
   )
 
   test('MUSE-MOBILE-REF-CHAT-COMPOSER — 430×932', async ({ page }) => {
