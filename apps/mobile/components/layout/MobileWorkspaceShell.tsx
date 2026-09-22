@@ -16,8 +16,10 @@ import {
 } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -26,10 +28,24 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useLocalSearchParams, usePathname, useRouter } from "expo-router";
-import { Folder, Menu, Plus, Search, Settings } from "lucide-react-native";
+import {
+  Folder,
+  Menu,
+  Pencil,
+  Pin,
+  PinOff,
+  Plus,
+  Search,
+  Settings,
+  Trash2,
+} from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { cn } from "@shogo/shared-ui/primitives";
-import { useDomainHttp, useProjectCollection } from "../../contexts/domain";
+import {
+  useDomainActions,
+  useDomainHttp,
+  useProjectCollection,
+} from "../../contexts/domain";
 import { useActiveWorkspace } from "../../hooks/useActiveWorkspace";
 import { useReducedMotion } from "../../hooks/useReducedMotion";
 import { api } from "../../lib/api";
@@ -39,6 +55,17 @@ import {
   type ProjectChatListItem,
 } from "../../lib/project-chat-sessions";
 import { NotificationBell } from "../notifications/NotificationBell";
+import { ChatTreeItem } from "./sidebar/ChatTreeItem";
+import {
+  SidebarContextMenu,
+  type SidebarMenuEntry,
+} from "./SidebarContextMenu";
+import { NativeProjectActionsSheet } from "./sidebar/NativeProjectActionsSheet";
+import {
+  getPinnedProjectIds,
+  setPinnedProjectIds,
+} from "../../lib/project-prefs-store";
+import { RenameProjectModal } from "../project/topbar/dropdown/RenameProjectModal";
 import {
   NATIVE_PHONE_HEADER_ICON_SIZE,
   useNativePhoneIconChrome,
@@ -60,6 +87,9 @@ type ProjectChatState = {
   loading: boolean;
 };
 
+// Drawer rows use 16px text with 6px vertical padding: six whole 36px rows.
+const DRAWER_CHAT_LIST_MAX_HEIGHT = 216;
+
 export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -69,6 +99,7 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
   const icon = useNativePhoneIconChrome();
   const liquidGlass = supportsLiquidGlass();
   const http = useDomainHttp();
+  const actions = useDomainActions();
   const workspace = useActiveWorkspace();
   const projects = useProjectCollection();
   const prefersReducedMotion = useReducedMotion();
@@ -80,6 +111,8 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
       name?: string | null;
       inferredName?: string | null;
       isPrimary?: boolean;
+      isPinned?: boolean;
+      isArchived?: boolean;
     }>
   >([]);
   const [sessionSearch, setSessionSearch] = useState("");
@@ -87,7 +120,16 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
   const [creatingSession, setCreatingSession] = useState(false);
   const [sideChatsExpanded, setSideChatsExpanded] = useState(true);
   const [projectsExpanded, setProjectsExpanded] = useState(true);
-  const [showAllSideChats, setShowAllSideChats] = useState(false);
+  const [pinnedProjectIds, setPinnedProjectIdsState] = useState<Set<string>>(
+    () => new Set(getPinnedProjectIds())
+  );
+  const [projectMenu, setProjectMenu] = useState<{
+    project: any;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [nativeProjectActions, setNativeProjectActions] = useState<any>(null);
+  const [renamingProject, setRenamingProject] = useState<any>(null);
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -98,14 +140,22 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
     const label = session.name || session.inferredName || "Untitled side chat";
     return label.toLowerCase().includes(sessionSearch.trim().toLowerCase());
   });
-  const sideChats = filteredSessions.filter((session) => !session.isPrimary);
-  const visibleSideChats =
-    showAllSideChats || sessionSearch.trim()
-      ? sideChats
-      : sideChats.slice(0, 5);
-  const workspaceProjects = projects.all.filter(
-    (project: any) => project.workspaceId === workspace?.id
-  );
+  const sideChats = filteredSessions
+    .filter((session) => !session.isPrimary && !session.isArchived)
+    .sort((a, b) => {
+      return (
+        Number(!!b.isPinned) - Number(!!a.isPinned) ||
+        String(b.id).localeCompare(String(a.id))
+      );
+    });
+  const workspaceProjects = projects.all
+    .filter((project: any) => project.workspaceId === workspace?.id)
+    .sort((a: any, b: any) => {
+      return (
+        Number(pinnedProjectIds.has(b.id)) -
+        Number(pinnedProjectIds.has(a.id))
+      );
+    });
   const activeProjectId =
     pathname.match(/\/(?:projects|project-chat)\/([^/?]+)/)?.[1] ?? null;
   const drawerWidth = Math.min(width * 0.86, 360);
@@ -222,6 +272,191 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
     },
     [expandedProjectIds, loadProjectChats, projectChats]
   );
+
+  const startProjectChat = (projectId: string) => {
+    closeSessions();
+    router.push({
+      pathname: "/(app)/project-chat/[id]",
+      params: {
+        id: projectId,
+        newChatNonce: String(Date.now()),
+      },
+    } as any);
+  };
+
+  const requestDeleteChat = (onConfirm: () => void) => {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      if (window.confirm("Delete this chat? This cannot be undone.")) onConfirm();
+      return;
+    }
+    Alert.alert("Delete chat", "This cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: onConfirm },
+    ]);
+  };
+
+  const updateWorkspaceChat = async (
+    sessionId: string,
+    changes: { name?: string; isPinned?: boolean; isArchived?: boolean }
+  ) => {
+    const previous = sessions;
+    setSessions((current) =>
+      current.map((session) =>
+        session.id === sessionId ? { ...session, ...changes } : session
+      )
+    );
+    try {
+      await http.patch(
+        `/api/chat-sessions/${encodeURIComponent(sessionId)}`,
+        changes
+      );
+    } catch {
+      setSessions(previous);
+    }
+  };
+
+  const deleteWorkspaceChat = async (sessionId: string) => {
+    const previous = sessions;
+    setSessions((current) => current.filter((session) => session.id !== sessionId));
+    try {
+      await http.delete(`/api/chat-sessions/${encodeURIComponent(sessionId)}`);
+    } catch {
+      setSessions(previous);
+    }
+  };
+
+  const updateProjectChat = async (
+    projectId: string,
+    sessionId: string,
+    changes: { name?: string; isPinned?: boolean; isArchived?: boolean }
+  ) => {
+    const previous = projectChats[projectId]?.sessions ?? [];
+    setProjectChats((current) => {
+      const state = current[projectId];
+      return state
+        ? {
+            ...current,
+            [projectId]: {
+              ...state,
+              sessions: state.sessions.map((session) =>
+                session.id === sessionId ? { ...session, ...changes } : session
+              ),
+            },
+          }
+        : current;
+    });
+    try {
+      await http.patch(
+        `/api/chat-sessions/${encodeURIComponent(sessionId)}`,
+        changes
+      );
+    } catch {
+      setProjectChats((current) => {
+        const state = current[projectId];
+        return state
+          ? { ...current, [projectId]: { ...state, sessions: previous } }
+          : current;
+      });
+    }
+  };
+
+  const deleteProjectChat = async (projectId: string, sessionId: string) => {
+    const previous = projectChats[projectId]?.sessions ?? [];
+    setProjectChats((current) => {
+      const state = current[projectId];
+      return state
+        ? {
+            ...current,
+            [projectId]: {
+              ...state,
+              sessions: state.sessions.filter((session) => session.id !== sessionId),
+            },
+          }
+        : current;
+    });
+    try {
+      await http.delete(`/api/chat-sessions/${encodeURIComponent(sessionId)}`);
+    } catch {
+      setProjectChats((current) => {
+        const state = current[projectId];
+        return state
+          ? { ...current, [projectId]: { ...state, sessions: previous } }
+          : current;
+      });
+    }
+  };
+
+  const toggleProjectPin = (projectId: string, next: boolean) => {
+    setPinnedProjectIdsState((current) => {
+      const updated = new Set(current);
+      if (next) updated.add(projectId);
+      else updated.delete(projectId);
+      setPinnedProjectIds(Array.from(updated));
+      return updated;
+    });
+  };
+
+  const renameProject = async (projectId: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    await actions.updateProject(projectId, { name: trimmed });
+  };
+
+  const deleteProject = (project: any) => {
+    const confirm = async () => {
+      await actions.deleteProject(project.id);
+      setPinnedProjectIdsState((current) => {
+        const updated = new Set(current);
+        updated.delete(project.id);
+        setPinnedProjectIds(Array.from(updated));
+        return updated;
+      });
+    };
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      if (window.confirm(`Delete ${project.name || "this project"}? This cannot be undone.`)) {
+        void confirm();
+      }
+      return;
+    }
+    Alert.alert(
+      "Delete project",
+      `Delete ${project.name || "this project"}? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => void confirm() },
+      ]
+    );
+  };
+
+  const projectMenuItems: SidebarMenuEntry[] = projectMenu
+    ? [
+        {
+          label: "Rename",
+          icon: <Pencil size={14} className="text-muted-foreground" />,
+          onSelect: () => setRenamingProject(projectMenu.project),
+        },
+        {
+          label: pinnedProjectIds.has(projectMenu.project.id) ? "Unpin" : "Pin",
+          icon: pinnedProjectIds.has(projectMenu.project.id) ? (
+            <PinOff size={14} className="text-muted-foreground" />
+          ) : (
+            <Pin size={14} className="text-muted-foreground" />
+          ),
+          onSelect: () =>
+            toggleProjectPin(
+              projectMenu.project.id,
+              !pinnedProjectIds.has(projectMenu.project.id)
+            ),
+        },
+        { separator: true },
+        {
+          label: "Delete",
+          danger: true,
+          icon: <Trash2 size={14} className="text-destructive" />,
+          onSelect: () => deleteProject(projectMenu.project),
+        },
+      ]
+    : [];
 
   return (
     <MobileWorkspaceChromeProvider>
@@ -342,7 +577,7 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
                         }}
                         className="rounded-xl bg-primary/10 px-3 py-3 active:opacity-80"
                       >
-                        <Text className="text-sm font-semibold text-foreground">
+                        <Text className="text-base font-semibold text-foreground">
                           Main chat
                         </Text>
                       </Pressable>
@@ -350,9 +585,9 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
                   <View className="mt-4">
                     <WorkspaceSidebarSection
                       label="Side chats"
-                      count={sideChats.length}
                       expanded={sideChatsExpanded}
                       onExpandedChange={setSideChatsExpanded}
+                      headerClassName="px-3"
                       action={
                         <Pressable
                           accessibilityRole="button"
@@ -371,68 +606,57 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
                         </Pressable>
                       }
                     >
-                      {visibleSideChats.map((session) => (
-                        <Pressable
-                          key={session.id}
-                          accessibilityRole="link"
-                          accessibilityLabel={`Open side chat ${
-                            session.name ||
-                            session.inferredName ||
-                            "Untitled side chat"
-                          }`}
-                          onPress={() => {
-                            closeSessions();
-                            router.push({
-                              pathname: "/(app)/side-chats/[id]",
-                              params: { id: session.id },
-                            } as any);
-                          }}
-                          className="rounded-xl px-3 py-3 active:bg-muted"
-                        >
-                          <Text
-                            className="text-sm font-medium text-foreground"
-                            numberOfLines={1}
-                          >
-                            {session.name ||
-                              session.inferredName ||
-                              "Untitled side chat"}
+                      <ScrollView
+                        nestedScrollEnabled
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator={sideChats.length > 6}
+                        style={{ maxHeight: DRAWER_CHAT_LIST_MAX_HEIGHT }}
+                      >
+                        {sideChats.map((session) => (
+                          <ChatTreeItem
+                            key={session.id}
+                            session={session}
+                            onSelect={() => {
+                              closeSessions();
+                              router.push({
+                                pathname: "/(app)/side-chats/[id]",
+                                params: { id: session.id },
+                              } as any);
+                            }}
+                            onTogglePin={(id, next) =>
+                              void updateWorkspaceChat(id, { isPinned: next })
+                            }
+                            onRename={(id, name) =>
+                              void updateWorkspaceChat(id, { name })
+                            }
+                            onToggleArchive={(id, next) =>
+                              void updateWorkspaceChat(id, { isArchived: next })
+                            }
+                            onRequestDelete={(id) =>
+                              requestDeleteChat(() => void deleteWorkspaceChat(id))
+                            }
+                            textClassName="text-base font-medium"
+                            inactiveTextClassName="text-foreground"
+                            rowClassName="min-h-0 rounded-xl px-3 py-1.5"
+                          />
+                        ))}
+                        {!loadingSessions && sideChats.length === 0 ? (
+                          <Text className="px-3 py-3 text-sm text-muted-foreground">
+                            {sessionSearch.trim()
+                              ? "No matching side chats."
+                              : "No side chats yet."}
                           </Text>
-                        </Pressable>
-                      ))}
-                      {sideChats.length > 5 && !sessionSearch.trim() ? (
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={
-                            showAllSideChats
-                              ? "Show fewer side chats"
-                              : "Show all side chats"
-                          }
-                          onPress={() =>
-                            setShowAllSideChats((showAll) => !showAll)
-                          }
-                          className="min-h-11 justify-center rounded-lg px-3 active:bg-muted"
-                        >
-                          <Text className="text-xs font-medium text-primary">
-                            {showAllSideChats ? "Show less" : "Show more"}
-                          </Text>
-                        </Pressable>
-                      ) : null}
-                      {!loadingSessions && sideChats.length === 0 ? (
-                        <Text className="px-3 py-3 text-sm text-muted-foreground">
-                          {sessionSearch.trim()
-                            ? "No matching side chats."
-                            : "No side chats yet."}
-                        </Text>
-                      ) : null}
+                        ) : null}
+                      </ScrollView>
                     </WorkspaceSidebarSection>
                   </View>
 
                   <View className="mt-3">
                     <WorkspaceSidebarSection
                       label="Projects"
-                      count={workspaceProjects.length}
                       expanded={projectsExpanded}
                       onExpandedChange={setProjectsExpanded}
+                      headerClassName="px-3"
                       action={
                         <Pressable
                           accessibilityRole="button"
@@ -447,12 +671,15 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
                         </Pressable>
                       }
                     >
-                      {workspaceProjects.map((project: any) => {
+                      {workspaceProjects.map((project: any, index: number) => {
                         const expanded = expandedProjectIds.has(project.id);
                         const chats = projectChats[project.id];
                         const projectIsActive = activeProjectId === project.id;
                         return (
-                          <View key={project.id}>
+                          <View
+                            key={project.id}
+                            className={index > 0 ? "mt-2" : undefined}
+                          >
                             <Pressable
                               accessibilityRole="button"
                               accessibilityLabel={`${
@@ -462,15 +689,47 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
                               }`}
                               accessibilityState={{ expanded }}
                               onPress={() => toggleProjectChats(project.id)}
-                              className="flex-row items-center gap-2 rounded-xl px-3 py-3 active:bg-muted"
+                              onLongPress={
+                                Platform.OS === "web"
+                                  ? undefined
+                                  : () => setNativeProjectActions(project)
+                              }
+                              {...(Platform.OS === "web"
+                                ? ({
+                                    onContextMenu: (event: any) => {
+                                      event?.preventDefault?.();
+                                      const nativeEvent =
+                                        event?.nativeEvent ?? event;
+                                      setProjectMenu({
+                                        project,
+                                        x: nativeEvent?.clientX ?? 0,
+                                        y: nativeEvent?.clientY ?? 0,
+                                      });
+                                    },
+                                  } as any)
+                                : {})}
+                              className="group flex-row items-center gap-2 rounded-xl px-3 py-1.5 active:bg-muted"
                             >
                               <Folder size={16} className="text-primary" />
                               <Text
-                                className="flex-1 text-sm font-medium text-foreground"
+                                className="flex-1 text-base font-medium text-foreground"
                                 numberOfLines={1}
                               >
                                 {project.name || "Untitled project"}
                               </Text>
+                              <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={`Create a new chat in ${
+                                  project.name || "this project"
+                                }`}
+                                onPress={(event) => {
+                                  event.stopPropagation?.();
+                                  startProjectChat(project.id);
+                                }}
+                                className="hidden h-8 w-8 items-center justify-center rounded-lg active:bg-muted group-hover:flex"
+                              >
+                                <Plus size={16} className="text-muted-foreground" />
+                              </Pressable>
                               {projectIsActive ? (
                                 <Pressable
                                   accessibilityRole="button"
@@ -509,34 +768,73 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
                                   <View className="px-2 py-2">
                                     <ActivityIndicator size="small" />
                                   </View>
-                                ) : chats?.sessions.length ? (
-                                  chats.sessions.map((chat) => (
-                                    <Pressable
-                                      key={chat.id}
-                                      accessibilityRole="link"
-                                      accessibilityLabel={`Open ${projectChatLabel(
-                                        chat
-                                      )}`}
-                                      onPress={() => {
-                                        closeSessions();
-                                        router.push({
-                                          pathname: "/(app)/project-chat/[id]",
-                                          params: {
-                                            id: project.id,
-                                            chatSessionId: chat.id,
-                                          },
-                                        } as any);
-                                      }}
-                                      className="rounded-lg px-2 py-2 active:bg-muted"
-                                    >
-                                      <Text
-                                        className="text-sm text-foreground"
-                                        numberOfLines={1}
-                                      >
-                                        {projectChatLabel(chat)}
-                                      </Text>
-                                    </Pressable>
-                                  ))
+                                ) : chats?.sessions.some(
+                                    (chat) => !chat.isArchived
+                                  ) ? (
+                                  <ScrollView
+                                    nestedScrollEnabled
+                                    keyboardShouldPersistTaps="handled"
+                                    showsVerticalScrollIndicator={
+                                      chats.sessions.filter(
+                                        (chat) => !chat.isArchived
+                                      ).length > 6
+                                    }
+                                    style={{
+                                      maxHeight: DRAWER_CHAT_LIST_MAX_HEIGHT,
+                                    }}
+                                  >
+                                    {chats.sessions
+                                      .filter((chat) => !chat.isArchived)
+                                      .map((chat) => (
+                                        <ChatTreeItem
+                                          key={chat.id}
+                                          session={chat}
+                                          onSelect={() => {
+                                            closeSessions();
+                                            router.push({
+                                              pathname:
+                                                "/(app)/project-chat/[id]",
+                                              params: {
+                                                id: project.id,
+                                                chatSessionId: chat.id,
+                                              },
+                                            } as any);
+                                          }}
+                                          onTogglePin={(id, next) =>
+                                            void updateProjectChat(
+                                              project.id,
+                                              id,
+                                              { isPinned: next }
+                                            )
+                                          }
+                                          onRename={(id, name) =>
+                                            void updateProjectChat(
+                                              project.id,
+                                              id,
+                                              { name }
+                                            )
+                                          }
+                                          onToggleArchive={(id, next) =>
+                                            void updateProjectChat(
+                                              project.id,
+                                              id,
+                                              { isArchived: next }
+                                            )
+                                          }
+                                          onRequestDelete={(id) =>
+                                            requestDeleteChat(() =>
+                                              void deleteProjectChat(
+                                                project.id,
+                                                id
+                                              )
+                                            )
+                                          }
+                                          textClassName="text-base font-medium"
+                                          inactiveTextClassName="text-foreground"
+                                          rowClassName="min-h-0 rounded-lg px-2 py-1.5"
+                                        />
+                                      ))}
+                                  </ScrollView>
                                 ) : (
                                   <Text className="px-2 py-2 text-xs text-muted-foreground">
                                     No project chats yet.
@@ -559,6 +857,47 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
             </Animated.View>
           </View>
         </Modal>
+        {projectMenu ? (
+          <SidebarContextMenu
+            x={projectMenu.x}
+            y={projectMenu.y}
+            items={projectMenuItems}
+            onClose={() => setProjectMenu(null)}
+          />
+        ) : null}
+        <NativeProjectActionsSheet
+          visible={nativeProjectActions !== null}
+          projectName={nativeProjectActions?.name || "Untitled project"}
+          isPinned={
+            nativeProjectActions
+              ? pinnedProjectIds.has(nativeProjectActions.id)
+              : false
+          }
+          onClose={() => setNativeProjectActions(null)}
+          onRename={() => {
+            setRenamingProject(nativeProjectActions);
+            setNativeProjectActions(null);
+          }}
+          onTogglePin={() => {
+            if (!nativeProjectActions) return;
+            toggleProjectPin(
+              nativeProjectActions.id,
+              !pinnedProjectIds.has(nativeProjectActions.id)
+            );
+          }}
+          onDelete={() => {
+            if (nativeProjectActions) deleteProject(nativeProjectActions);
+          }}
+        />
+        <RenameProjectModal
+          visible={renamingProject !== null}
+          currentName={renamingProject?.name || ""}
+          onClose={() => setRenamingProject(null)}
+          onRename={(name) => {
+            if (renamingProject) void renameProject(renamingProject.id, name);
+            setRenamingProject(null);
+          }}
+        />
       </View>
     </MobileWorkspaceChromeProvider>
   );
