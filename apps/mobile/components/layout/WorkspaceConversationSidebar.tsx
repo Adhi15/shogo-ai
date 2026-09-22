@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { observer } from "mobx-react-lite";
 import {
   ActivityIndicator,
   Alert,
@@ -73,7 +74,7 @@ function routeIsActive(pathname: string, href: string): boolean {
   return pathname === normalized || pathname.startsWith(`${normalized}/`);
 }
 
-export function WorkspaceConversationSidebar() {
+function WorkspaceConversationSidebarView() {
   const router = useRouter();
   const pathname = usePathname();
   const http = useDomainHttp();
@@ -766,3 +767,7 @@ export function WorkspaceConversationSidebar() {
     </View>
   );
 }
+
+export const WorkspaceConversationSidebar = observer(
+  WorkspaceConversationSidebarView
+);

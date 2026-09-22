@@ -55,7 +55,11 @@ const primaryNav: NavItem[] = [
 function routeIsActive(pathname: string, href: string): boolean {
   if (href === "/(app)")
     return (
-      pathname === "/" || pathname === "/(app)" || pathname === "/(app)/index"
+      pathname === "/" ||
+      pathname === "/(app)" ||
+      pathname === "/(app)/index" ||
+      pathname.includes("/side-chats/") ||
+      pathname.includes("/project-chat/")
     );
   const normalized = href.replace("/(app)", "");
   return pathname === normalized || pathname.startsWith(`${normalized}/`);
