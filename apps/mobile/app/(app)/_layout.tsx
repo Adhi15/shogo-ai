@@ -137,6 +137,12 @@ function AppLayoutInner() {
   const isSearchPage = pathname === "/search" || pathname === "/(app)/search";
   const isProjectChatsPage =
     pathname === "/project-chats" || pathname === "/(app)/project-chats";
+  const isNonChatWorkspacePage = [
+    "/tasks",
+    "/activity",
+    "/canvases",
+    "/goals",
+  ].some((segment) => pathname.includes(segment));
 
   usePostHogIdentify();
   const posthog = usePostHogSafe();
@@ -229,7 +235,8 @@ function AppLayoutInner() {
     isProfilePage ||
     isAccountPage ||
     isSearchPage ||
-    isProjectChatsPage;
+    isProjectChatsPage ||
+    isNonChatWorkspacePage;
   // The companion mobile shell owns its own drawer and swipe gesture. Keep
   // the legacy sheet drawer inactive there so an edge swipe cannot reveal the
   // old AppSidebar behind the new chat chrome.

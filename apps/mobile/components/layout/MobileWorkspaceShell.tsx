@@ -95,7 +95,12 @@ const DRAWER_OPEN_SWIPE_DISTANCE = 48;
 export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const routeParams = useLocalSearchParams<{ chatSessionId?: string }>();
+  const routeParams = useLocalSearchParams<{
+    chatSessionId?: string;
+    navTab?: string;
+    surface?: string;
+    tab?: string;
+  }>();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const icon = useNativePhoneIconChrome();
@@ -160,6 +165,13 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
     });
   const activeProjectId =
     pathname.match(/\/(?:projects|project-chat)\/([^/?]+)/)?.[1] ?? null;
+  const projectPane =
+    routeParams.navTab ?? routeParams.surface ?? routeParams.tab;
+  const showChatChrome =
+    !pathname.includes("/project-surface/") &&
+    !["canvas", "external-preview", "app-preview", "files", "plans"].includes(
+      projectPane ?? ""
+    );
   const drawerWidth = Math.min(width * 0.86, 360);
 
   const openSessions = () => {
@@ -185,6 +197,7 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
   // horizontal right-swipes so vertical transcript scrolling remains native.
   const sessionDrawerSwipeHandlers = PanResponder.create({
     onMoveShouldSetPanResponder: (_event, gesture) =>
+      showChatChrome &&
       !sessionsOpen &&
       gesture.dx > 8 &&
       Math.abs(gesture.dx) > Math.abs(gesture.dy),
@@ -197,6 +210,13 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
       }
     },
   }).panHandlers;
+
+  useEffect(() => {
+    if (showChatChrome) return;
+    drawerProgress.stopAnimation();
+    drawerProgress.setValue(0);
+    setSessionsOpen(false);
+  }, [drawerProgress, showChatChrome]);
 
   useEffect(() => {
     if (!sessionsOpen || !workspace?.id) return;
@@ -484,40 +504,50 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
         {...sessionDrawerSwipeHandlers}
       >
         <View className="min-h-0 flex-1">{children}</View>
-        <View
-          className="absolute left-3 z-20 flex-row items-center"
-          style={{ top: insets.top + 10 }}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              sessionsOpen ? "Close chat sessions" : "Open chat sessions"
-            }
-            accessibilityState={{ expanded: sessionsOpen }}
-            onPress={() => (sessionsOpen ? closeSessions() : openSessions())}
-            className={cn(
-              "h-11 w-11 items-center justify-center overflow-hidden rounded-full border active:bg-muted",
-              liquidGlass
-                ? "border-white/25 bg-transparent"
-                : "border-border/70 bg-card/95"
-            )}
-          >
-            <LiquidGlassBackdrop style={{ borderRadius: 999 }} />
-            <Menu size={20} color={icon.color} strokeWidth={icon.strokeWidth} />
-          </Pressable>
-        </View>
-        <View
-          className={cn(
-            "absolute right-3 z-20 h-11 w-11 items-center justify-center overflow-hidden rounded-full border",
-            liquidGlass
-              ? "border-white/25 bg-transparent"
-              : "border-border/70 bg-card/95"
-          )}
-          style={{ top: insets.top + 10 }}
-        >
-          <LiquidGlassBackdrop style={{ borderRadius: 999 }} />
-          <NotificationBell size={NATIVE_PHONE_HEADER_ICON_SIZE} />
-        </View>
+        {showChatChrome ? (
+          <>
+            <View
+              className="absolute left-3 z-20 flex-row items-center"
+              style={{ top: insets.top + 10 }}
+            >
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  sessionsOpen ? "Close chat sessions" : "Open chat sessions"
+                }
+                accessibilityState={{ expanded: sessionsOpen }}
+                onPress={() =>
+                  sessionsOpen ? closeSessions() : openSessions()
+                }
+                className={cn(
+                  "h-11 w-11 items-center justify-center overflow-hidden rounded-full border active:bg-muted",
+                  liquidGlass
+                    ? "border-white/25 bg-transparent"
+                    : "border-border/70 bg-card/95"
+                )}
+              >
+                <LiquidGlassBackdrop style={{ borderRadius: 999 }} />
+                <Menu
+                  size={20}
+                  color={icon.color}
+                  strokeWidth={icon.strokeWidth}
+                />
+              </Pressable>
+            </View>
+            <View
+              className={cn(
+                "absolute right-3 z-20 h-11 w-11 items-center justify-center overflow-hidden rounded-full border",
+                liquidGlass
+                  ? "border-white/25 bg-transparent"
+                  : "border-border/70 bg-card/95"
+              )}
+              style={{ top: insets.top + 10 }}
+            >
+              <LiquidGlassBackdrop style={{ borderRadius: 999 }} />
+              <NotificationBell size={NATIVE_PHONE_HEADER_ICON_SIZE} />
+            </View>
+          </>
+        ) : null}
         <Modal
           visible={sessionsOpen}
           transparent
