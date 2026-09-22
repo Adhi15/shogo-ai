@@ -437,9 +437,10 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel="Create a new project"
-                          onPress={() =>
-                            router.push("/(app)/new-project" as any)
-                          }
+                          onPress={() => {
+                            closeSessions();
+                            router.push("/(app)/new-project" as any);
+                          }}
                           className="h-11 w-11 items-center justify-center rounded-lg active:bg-muted"
                         >
                           <Plus size={17} color={icon.color} />
