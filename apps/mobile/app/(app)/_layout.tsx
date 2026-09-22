@@ -230,15 +230,17 @@ function AppLayoutInner() {
     isAccountPage ||
     isSearchPage ||
     isProjectChatsPage;
-  // Project chat has its own header, but it still uses the same native drawer
-  // underneath. Keep horizontal drawer gestures enabled there so the sheet
-  // can be opened and dismissed by swiping just like Home.
+  // The companion mobile shell owns its own drawer and swipe gesture. Keep
+  // the legacy sheet drawer inactive there so an edge swipe cannot reveal the
+  // old AppSidebar behind the new chat chrome.
   const nativeDrawerSwipe =
     !isWide &&
     !isIdeEmbed &&
+    !useMobileWorkspaceShell &&
     !phoneSheetOpen &&
     (!suppressNarrowAppHeader || isProjectDetail);
-  const nativeSheetDrawer = !isWide && !isIdeEmbed;
+  const nativeSheetDrawer =
+    !isWide && !isIdeEmbed && !useMobileWorkspaceShell;
   const drawer = useNativeSheetDrawer({
     windowWidth: width,
     isDark,
@@ -255,7 +257,7 @@ function AppLayoutInner() {
   useEffect(() => {
     let pendingFrame: number | null = null;
     const unsubscribe = projectSidebarEvents.subscribeOpenProject(() => {
-      if (isWide || isIdeEmbed) return;
+      if (isWide || isIdeEmbed || useMobileWorkspaceShell) return;
       if (drawerOpen) {
         closeDrawer();
         return;
@@ -273,12 +275,23 @@ function AppLayoutInner() {
       if (pendingFrame !== null) cancelAnimationFrame(pendingFrame);
       unsubscribe();
     };
-  }, [closeDrawer, drawerOpen, isIdeEmbed, isWide, openDrawer]);
+  }, [
+    closeDrawer,
+    drawerOpen,
+    isIdeEmbed,
+    isWide,
+    openDrawer,
+    useMobileWorkspaceShell,
+  ]);
 
   useEffect(() => {
     if (!isWide && !isAccountPage) return;
     resetDrawer();
   }, [isAccountPage, isWide, resetDrawer]);
+
+  useEffect(() => {
+    if (useMobileWorkspaceShell) resetDrawer();
+  }, [resetDrawer, useMobileWorkspaceShell]);
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;

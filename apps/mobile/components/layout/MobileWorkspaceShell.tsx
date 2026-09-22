@@ -19,6 +19,7 @@ import {
   Alert,
   Animated,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -89,6 +90,7 @@ type ProjectChatState = {
 
 // Drawer rows use 16px text with 6px vertical padding: six whole 36px rows.
 const DRAWER_CHAT_LIST_MAX_HEIGHT = 216;
+const DRAWER_OPEN_SWIPE_DISTANCE = 48;
 
 export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
   const router = useRouter();
@@ -178,6 +180,23 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
       useNativeDriver: true,
     }).start(() => setSessionsOpen(false));
   };
+
+  // The mobile workspace chrome owns its drawer. Claim only clear,
+  // horizontal right-swipes so vertical transcript scrolling remains native.
+  const sessionDrawerSwipeHandlers = PanResponder.create({
+    onMoveShouldSetPanResponder: (_event, gesture) =>
+      !sessionsOpen &&
+      gesture.dx > 8 &&
+      Math.abs(gesture.dx) > Math.abs(gesture.dy),
+    onPanResponderRelease: (_event, gesture) => {
+      if (
+        gesture.dx >= DRAWER_OPEN_SWIPE_DISTANCE ||
+        gesture.vx > 0.45
+      ) {
+        openSessions();
+      }
+    },
+  }).panHandlers;
 
   useEffect(() => {
     if (!sessionsOpen || !workspace?.id) return;
@@ -460,7 +479,10 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
 
   return (
     <MobileWorkspaceChromeProvider>
-      <View className="relative flex-1 bg-background">
+      <View
+        className="relative flex-1 bg-background"
+        {...sessionDrawerSwipeHandlers}
+      >
         <View className="min-h-0 flex-1">{children}</View>
         <View
           className="absolute left-3 z-20 flex-row items-center"
