@@ -30,6 +30,8 @@ import {
 } from "react-native";
 import { useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import {
+  ChevronDown,
+  ChevronRight,
   Folder,
   Menu,
   Pencil,
@@ -126,6 +128,8 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [creatingSession, setCreatingSession] = useState(false);
   const [sideChatsExpanded, setSideChatsExpanded] = useState(true);
+  const [archivedSideChatsExpanded, setArchivedSideChatsExpanded] =
+    useState(false);
   const [projectsExpanded, setProjectsExpanded] = useState(true);
   const [pinnedProjectIds, setPinnedProjectIdsState] = useState<Set<string>>(
     () => new Set(getPinnedProjectIds())
@@ -141,6 +145,9 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(
     () => new Set()
   );
+  const [expandedArchivedProjectIds, setExpandedArchivedProjectIds] = useState<
+    Set<string>
+  >(() => new Set());
   const [projectChats, setProjectChats] = useState<
     Record<string, ProjectChatState>
   >({});
@@ -156,6 +163,16 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
         String(b.id).localeCompare(String(a.id))
       );
     });
+  const archivedSideChats = filteredSessions
+    .filter((session) => !session.isPrimary && session.isArchived)
+    .sort((a, b) => {
+      return (
+        Number(!!b.isPinned) - Number(!!a.isPinned) ||
+        String(b.id).localeCompare(String(a.id))
+      );
+    });
+  const showArchivedSideChats =
+    archivedSideChatsExpanded || sessionSearch.trim().length > 0;
   const workspaceProjects = projects.all
     .filter((project: any) => project.workspaceId === workspace?.id)
     .sort((a: any, b: any) => {
@@ -241,6 +258,7 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
 
   useEffect(() => {
     setExpandedProjectIds(new Set());
+    setExpandedArchivedProjectIds(new Set());
     setProjectChats({});
   }, [workspace?.id]);
 
@@ -693,7 +711,9 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
                             rowClassName="min-h-0 rounded-xl px-3 py-1.5"
                           />
                         ))}
-                        {!loadingSessions && sideChats.length === 0 ? (
+                        {!loadingSessions &&
+                        sideChats.length === 0 &&
+                        archivedSideChats.length === 0 ? (
                           <Text className="px-3 py-3 text-sm text-muted-foreground">
                             {sessionSearch.trim()
                               ? "No matching side chats."
@@ -701,6 +721,85 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
                           </Text>
                         ) : null}
                       </ScrollView>
+                      {archivedSideChats.length > 0 ? (
+                        <View className="mt-1">
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`${
+                              showArchivedSideChats ? "Collapse" : "Expand"
+                            } archived side chats`}
+                            accessibilityState={{
+                              expanded: showArchivedSideChats,
+                            }}
+                            onPress={() =>
+                              setArchivedSideChatsExpanded((value) => !value)
+                            }
+                            className="flex-row items-center gap-2 rounded-lg px-3 py-2 active:bg-muted"
+                          >
+                            {showArchivedSideChats ? (
+                              <ChevronDown
+                                size={16}
+                                className="text-muted-foreground"
+                              />
+                            ) : (
+                              <ChevronRight
+                                size={16}
+                                className="text-muted-foreground"
+                              />
+                            )}
+                            <Text className="text-sm font-medium text-muted-foreground">
+                              Archived
+                            </Text>
+                          </Pressable>
+                          {showArchivedSideChats ? (
+                            <ScrollView
+                              nestedScrollEnabled
+                              keyboardShouldPersistTaps="handled"
+                              showsVerticalScrollIndicator={
+                                archivedSideChats.length > 6
+                              }
+                              style={{
+                                maxHeight: DRAWER_CHAT_LIST_MAX_HEIGHT,
+                              }}
+                            >
+                              {archivedSideChats.map((session) => (
+                                <ChatTreeItem
+                                  key={session.id}
+                                  session={session}
+                                  onSelect={() => {
+                                    closeSessions();
+                                    router.push({
+                                      pathname: "/(app)/side-chats/[id]",
+                                      params: { id: session.id },
+                                    } as any);
+                                  }}
+                                  onTogglePin={(id, next) =>
+                                    void updateWorkspaceChat(id, {
+                                      isPinned: next,
+                                    })
+                                  }
+                                  onRename={(id, name) =>
+                                    void updateWorkspaceChat(id, { name })
+                                  }
+                                  onToggleArchive={(id, next) =>
+                                    void updateWorkspaceChat(id, {
+                                      isArchived: next,
+                                    })
+                                  }
+                                  onRequestDelete={(id) =>
+                                    requestDeleteChat(() =>
+                                      void deleteWorkspaceChat(id)
+                                    )
+                                  }
+                                  textClassName="text-base font-medium"
+                                  inactiveTextClassName="text-foreground"
+                                  rowClassName="min-h-0 rounded-xl px-3 py-1.5"
+                                />
+                              ))}
+                            </ScrollView>
+                          ) : null}
+                        </View>
+                      ) : null}
                     </WorkspaceSidebarSection>
                   </View>
 
@@ -727,6 +826,14 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
                       {workspaceProjects.map((project: any, index: number) => {
                         const expanded = expandedProjectIds.has(project.id);
                         const chats = projectChats[project.id];
+                        const activeChats =
+                          chats?.sessions.filter((chat) => !chat.isArchived) ??
+                          [];
+                        const archivedChats =
+                          chats?.sessions.filter((chat) => chat.isArchived) ??
+                          [];
+                        const archivedChatsExpanded =
+                          expandedArchivedProjectIds.has(project.id);
                         const projectIsActive = activeProjectId === project.id;
                         return (
                           <View
@@ -838,77 +945,187 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
                                   <View className="px-2 py-2">
                                     <ActivityIndicator size="small" />
                                   </View>
-                                ) : chats?.sessions.some(
-                                    (chat) => !chat.isArchived
-                                  ) ? (
-                                  <ScrollView
-                                    nestedScrollEnabled
-                                    keyboardShouldPersistTaps="handled"
-                                    showsVerticalScrollIndicator={
-                                      chats.sessions.filter(
-                                        (chat) => !chat.isArchived
-                                      ).length > 6
-                                    }
-                                    style={{
-                                      maxHeight: DRAWER_CHAT_LIST_MAX_HEIGHT,
-                                    }}
-                                  >
-                                    {chats.sessions
-                                      .filter((chat) => !chat.isArchived)
-                                      .map((chat) => (
-                                        <ChatTreeItem
-                                          key={chat.id}
-                                          session={chat}
-                                          onSelect={() => {
-                                            closeSessions();
-                                            router.push({
-                                              pathname:
-                                                "/(app)/project-chat/[id]",
-                                              params: {
-                                                id: project.id,
-                                                chatSessionId: chat.id,
-                                              },
-                                            } as any);
-                                          }}
-                                          onTogglePin={(id, next) =>
-                                            void updateProjectChat(
-                                              project.id,
-                                              id,
-                                              { isPinned: next }
-                                            )
-                                          }
-                                          onRename={(id, name) =>
-                                            void updateProjectChat(
-                                              project.id,
-                                              id,
-                                              { name }
-                                            )
-                                          }
-                                          onToggleArchive={(id, next) =>
-                                            void updateProjectChat(
-                                              project.id,
-                                              id,
-                                              { isArchived: next }
-                                            )
-                                          }
-                                          onRequestDelete={(id) =>
-                                            requestDeleteChat(() =>
-                                              void deleteProjectChat(
-                                                project.id,
-                                                id
-                                              )
-                                            )
-                                          }
-                                          textClassName="text-base font-medium"
-                                          inactiveTextClassName="text-foreground"
-                                          rowClassName="min-h-0 rounded-lg px-2 py-1.5"
-                                        />
-                                      ))}
-                                  </ScrollView>
                                 ) : (
-                                  <Text className="px-2 py-2 text-xs text-muted-foreground">
-                                    No project chats yet.
-                                  </Text>
+                                  <>
+                                    {activeChats.length > 0 ? (
+                                      <ScrollView
+                                        nestedScrollEnabled
+                                        keyboardShouldPersistTaps="handled"
+                                        showsVerticalScrollIndicator={
+                                          activeChats.length > 6
+                                        }
+                                        style={{
+                                          maxHeight:
+                                            DRAWER_CHAT_LIST_MAX_HEIGHT,
+                                        }}
+                                      >
+                                        {activeChats.map((chat) => (
+                                          <ChatTreeItem
+                                            key={chat.id}
+                                            session={chat}
+                                            onSelect={() => {
+                                              closeSessions();
+                                              router.push({
+                                                pathname:
+                                                  "/(app)/project-chat/[id]",
+                                                params: {
+                                                  id: project.id,
+                                                  chatSessionId: chat.id,
+                                                },
+                                              } as any);
+                                            }}
+                                            onTogglePin={(id, next) =>
+                                              void updateProjectChat(
+                                                project.id,
+                                                id,
+                                                { isPinned: next }
+                                              )
+                                            }
+                                            onRename={(id, name) =>
+                                              void updateProjectChat(
+                                                project.id,
+                                                id,
+                                                { name }
+                                              )
+                                            }
+                                            onToggleArchive={(id, next) =>
+                                              void updateProjectChat(
+                                                project.id,
+                                                id,
+                                                { isArchived: next }
+                                              )
+                                            }
+                                            onRequestDelete={(id) =>
+                                              requestDeleteChat(() =>
+                                                void deleteProjectChat(
+                                                  project.id,
+                                                  id
+                                                )
+                                              )
+                                            }
+                                            textClassName="text-base font-medium"
+                                            inactiveTextClassName="text-foreground"
+                                            rowClassName="min-h-0 rounded-lg px-2 py-1.5"
+                                          />
+                                        ))}
+                                      </ScrollView>
+                                    ) : null}
+                                    {archivedChats.length > 0 ? (
+                                      <View className="mt-1">
+                                        <Pressable
+                                          accessibilityRole="button"
+                                          accessibilityLabel={`${
+                                            archivedChatsExpanded
+                                              ? "Collapse"
+                                              : "Expand"
+                                          } archived chats for ${
+                                            project.name || "this project"
+                                          }`}
+                                          accessibilityState={{
+                                            expanded: archivedChatsExpanded,
+                                          }}
+                                          onPress={() =>
+                                            setExpandedArchivedProjectIds(
+                                              (current) => {
+                                                const next = new Set(current);
+                                                if (next.has(project.id)) {
+                                                  next.delete(project.id);
+                                                } else {
+                                                  next.add(project.id);
+                                                }
+                                                return next;
+                                              }
+                                            )
+                                          }
+                                          className="flex-row items-center gap-2 rounded-lg px-2 py-2 active:bg-muted"
+                                        >
+                                          {archivedChatsExpanded ? (
+                                            <ChevronDown
+                                              size={16}
+                                              className="text-muted-foreground"
+                                            />
+                                          ) : (
+                                            <ChevronRight
+                                              size={16}
+                                              className="text-muted-foreground"
+                                            />
+                                          )}
+                                          <Text className="text-sm font-medium text-muted-foreground">
+                                            Archived
+                                          </Text>
+                                        </Pressable>
+                                        {archivedChatsExpanded ? (
+                                          <ScrollView
+                                            nestedScrollEnabled
+                                            keyboardShouldPersistTaps="handled"
+                                            showsVerticalScrollIndicator={
+                                              archivedChats.length > 6
+                                            }
+                                            style={{
+                                              maxHeight:
+                                                DRAWER_CHAT_LIST_MAX_HEIGHT,
+                                            }}
+                                          >
+                                            {archivedChats.map((chat) => (
+                                              <ChatTreeItem
+                                                key={chat.id}
+                                                session={chat}
+                                                onSelect={() => {
+                                                  closeSessions();
+                                                  router.push({
+                                                    pathname:
+                                                      "/(app)/project-chat/[id]",
+                                                    params: {
+                                                      id: project.id,
+                                                      chatSessionId: chat.id,
+                                                    },
+                                                  } as any);
+                                                }}
+                                                onTogglePin={(id, next) =>
+                                                  void updateProjectChat(
+                                                    project.id,
+                                                    id,
+                                                    { isPinned: next }
+                                                  )
+                                                }
+                                                onRename={(id, name) =>
+                                                  void updateProjectChat(
+                                                    project.id,
+                                                    id,
+                                                    { name }
+                                                  )
+                                                }
+                                                onToggleArchive={(id, next) =>
+                                                  void updateProjectChat(
+                                                    project.id,
+                                                    id,
+                                                    { isArchived: next }
+                                                  )
+                                                }
+                                                onRequestDelete={(id) =>
+                                                  requestDeleteChat(() =>
+                                                    void deleteProjectChat(
+                                                      project.id,
+                                                      id
+                                                    )
+                                                  )
+                                                }
+                                                textClassName="text-base font-medium"
+                                                inactiveTextClassName="text-foreground"
+                                                rowClassName="min-h-0 rounded-lg px-2 py-1.5"
+                                              />
+                                            ))}
+                                          </ScrollView>
+                                        ) : null}
+                                      </View>
+                                    ) : null}
+                                    {activeChats.length === 0 &&
+                                    archivedChats.length === 0 ? (
+                                      <Text className="px-2 py-2 text-xs text-muted-foreground">
+                                        No project chats yet.
+                                      </Text>
+                                    ) : null}
+                                  </>
                                 )}
                               </View>
                             ) : null}
