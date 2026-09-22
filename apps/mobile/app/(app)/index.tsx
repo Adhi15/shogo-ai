@@ -30,8 +30,13 @@ import {
   useDomainHttp,
 } from '../../contexts/domain'
 import { CompactChatInput, ComposerPlusSection } from '../../components/chat/CompactChatInput'
-import type { FileAttachment, InteractionMode } from '../../components/chat/ChatInput'
-import { DEFAULT_MODEL_PRO, DEFAULT_MODEL_FREE } from '../../components/chat/ChatInput'
+import {
+  ChatInput,
+  DEFAULT_MODEL_PRO,
+  DEFAULT_MODEL_FREE,
+  type FileAttachment,
+  type InteractionMode,
+} from '../../components/chat/ChatInput'
 import {
   loadInteractionModePreference,
   saveInteractionModePreference,
@@ -66,6 +71,7 @@ import { Layers } from 'lucide-react-native'
 import { ShogoLogoMark } from '../../components/branding/ShogoLogoMark'
 import { WorkspaceAgentChatScreen } from '../../components/workspace/WorkspaceAgentChatScreen'
 import { CreatePersonalSpaceBanner } from '../../components/personal/CreatePersonalSpaceBanner'
+import { useMobileWorkspaceChrome } from '../../components/layout/MobileWorkspaceChromeContext'
 
 /**
  * Default tech stack for blank projects created from the home composer.
@@ -266,6 +272,7 @@ export const HomeScreen = observer(function HomeScreen({
   const isMobile = screenWidth < 640
   const isNativePhone = isPhoneLayout(screenWidth, screenHeight)
   const isNarrowAgentSurface = Platform.OS !== 'web' || screenWidth < WEB_WIDE_MIN_WIDTH
+  const usesMobileWorkspaceChrome = useMobileWorkspaceChrome()
   const homeEntrance = useRef(new Animated.Value(Platform.OS === 'web' ? 1 : 0)).current
   const restComposerPad = Math.max(insets.bottom, NATIVE_COMPOSER_KEYBOARD_GAP)
   const restComposerSidePad = NATIVE_PHONE_GUTTER
@@ -946,7 +953,15 @@ export const HomeScreen = observer(function HomeScreen({
     </>
   )
 
-  const composer = (
+  const composer = usesMobileWorkspaceChrome ? (
+    <ChatInput
+      onSubmit={(text, files) => handlePromptSubmit(text, files)}
+      disabled={isCreating}
+      placeholder="Describe the project you want to build..."
+      composer={currentExperience.composer}
+      presentation="agent"
+    />
+  ) : (
     <View className={isNativePhone ? 'w-full' : 'w-full rounded-2xl'} style={composerWrapperStyle}>
       <CompactChatInput
         onSubmit={handlePromptSubmit}
@@ -1048,12 +1063,17 @@ export const HomeScreen = observer(function HomeScreen({
         </Animated.View>
         <View
           className="w-full"
-          style={[CONTENT_MAX_WIDTH, { alignSelf: 'center' }]}
+          style={[
+            usesMobileWorkspaceChrome ? undefined : CONTENT_MAX_WIDTH,
+            { alignSelf: 'center' },
+          ]}
         >
           <Animated.View
             style={{
               paddingBottom: composerKeyboardPad,
-              paddingHorizontal: restComposerSidePad,
+              paddingHorizontal: usesMobileWorkspaceChrome
+                ? 0
+                : restComposerSidePad,
             }}
           >
             {composer}
@@ -1082,7 +1102,15 @@ export const HomeScreen = observer(function HomeScreen({
     </View>
   )
 
-  if (Platform.OS === 'web' && !isNativePhone) return screen
+  // The full mobile ChatInput manages focus/keyboard dismissal itself. The
+  // legacy home wrapper dismisses the keyboard on its child press, which
+  // steals focus from that composer after the first character.
+  if (
+    (Platform.OS === 'web' && !isNativePhone) ||
+    usesMobileWorkspaceChrome
+  ) {
+    return screen
+  }
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>

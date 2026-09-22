@@ -111,6 +111,7 @@ function AppLayoutInner() {
   const isWorkspaceChatRoute =
     isHomePage ||
     isProjectDetail ||
+    pathname.includes("/new-project") ||
     pathname.includes("/side-chats/") ||
     pathname.includes("/project-chat/") ||
     pathname.includes("/project-surface/");
