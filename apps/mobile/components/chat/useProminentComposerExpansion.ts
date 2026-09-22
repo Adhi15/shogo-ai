@@ -26,8 +26,8 @@ import { NATIVE_PHONE_COMPOSER_PILL_HEIGHT } from "../../lib/native-phone-layout
 
 export const PROMINENT_COMPOSER_MIN_HEIGHT = 24
 export const PROMINENT_COMPOSER_MAX_HEIGHT = 132
-export const PROMINENT_COMPOSER_LINE_HEIGHT = 22
-export const PROMINENT_COMPOSER_FONT_SIZE = 16
+export const PROMINENT_COMPOSER_LINE_HEIGHT = 20
+export const PROMINENT_COMPOSER_FONT_SIZE = 14
 export const PROMINENT_COMPOSER_PADDING_TOP = 14
 export const PROMINENT_COMPOSER_PADDING_HORIZONTAL = 16
 export const PROMINENT_COMPOSER_PADDING_BOTTOM = 8
@@ -45,8 +45,8 @@ export const PROMINENT_COMPOSER_WRAP_SLOP = 8
 export const PROMINENT_COMPOSER_MEASURE_TEXT_WIDTH = 10000
 /** Keep the native compact field centered in the 45px toolbar row. */
 export const PROMINENT_COMPOSER_NATIVE_COMPACT_TEXT_OFFSET = 0
-/** Keep the iOS placeholder centered with the compact composer controls. */
-export const PROMINENT_COMPOSER_NATIVE_COMPACT_PLACEHOLDER_TOP = 0
+/** Keep compact placeholder text centered with the composer controls. */
+export const PROMINENT_COMPOSER_NATIVE_COMPACT_PLACEHOLDER_TOP = 2
 export const PROMINENT_COMPOSER_OVERLAY_Z_INDEX = 4
 export const PROMINENT_COMPOSER_TOOLBAR_Z_INDEX = 3
 export const PROMINENT_COMPOSER_CHROME_Z_INDEX = 5

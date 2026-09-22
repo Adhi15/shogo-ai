@@ -20,6 +20,7 @@ type UseProminentComposerHeightOptions = {
   paddingTop: number;
   paddingHorizontal: number;
   paddingBottom: number;
+  toolbarMinHeight?: number;
   duration?: number;
   easing?: (value: number) => number;
   inputHeightAnimation?: Animated.Value;
@@ -47,6 +48,7 @@ export function useProminentComposerHeight({
   paddingTop,
   paddingHorizontal,
   paddingBottom,
+  toolbarMinHeight,
   duration = PROMINENT_COMPOSER_HEIGHT_ANIMATION_DURATION,
   easing = PROMINENT_COMPOSER_HEIGHT_EASING,
   inputHeightAnimation: providedAnimation,
@@ -69,6 +71,7 @@ export function useProminentComposerHeight({
     paddingTop,
     paddingHorizontal,
     paddingBottom,
+    toolbarMinHeight,
     duration,
     easing,
   });

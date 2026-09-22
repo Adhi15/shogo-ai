@@ -146,7 +146,7 @@ export const ProminentComposerField = forwardRef<
             top: stacked
               ? 0
               : Platform.OS === "web"
-              ? 1
+              ? 2
               : PROMINENT_COMPOSER_NATIVE_COMPACT_PLACEHOLDER_TOP,
             height: PROMINENT_COMPOSER_MIN_HEIGHT,
             fontSize: PROMINENT_COMPOSER_FONT_SIZE,
@@ -186,7 +186,8 @@ export const ProminentComposerField = forwardRef<
             fontSize: PROMINENT_COMPOSER_FONT_SIZE,
             lineHeight: PROMINENT_COMPOSER_LINE_HEIGHT,
             paddingHorizontal: stacked ? 0 : 4,
-            paddingTop: stacked ? 0 : 1,
+            paddingTop:
+              stacked ? 0 : 2,
             paddingBottom: stacked ? 0 : 1,
             margin: 0,
             backgroundColor: "transparent",

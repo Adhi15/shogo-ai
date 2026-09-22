@@ -21,7 +21,8 @@
  * Personal is a SUBSET of team: every field here removes/replaces a team
  * capability, there are no personal-only additions modeled as booleans
  * (goal/activity nav are the one exception, since personal's home surface
- * genuinely adds nav the team shell doesn't have).
+ * genuinely adds nav the team shell doesn't have). Model choice remains
+ * available in both experiences because it changes how every prompt runs.
  */
 
 export type WorkspaceExperienceKind = 'personal' | 'team'
@@ -107,7 +108,7 @@ export function workspaceExperience(
       : ['chat', 'tasks', 'activity', 'canvases', 'more'],
     chatReturnsToProjectContext: !isPersonal,
     composer: {
-      showModelPicker: !isPersonal,
+      showModelPicker: true,
       showInteractionModes: !isPersonal,
       forcedMode: isPersonal ? 'agent' : undefined,
     },

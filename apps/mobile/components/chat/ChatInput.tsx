@@ -35,7 +35,6 @@ import {
 } from "react-native";
 import { cn } from "@shogo/shared-ui/primitives";
 import {
-  NATIVE_PHONE_COMPOSER_PILL_HEIGHT,
   NATIVE_PHONE_ICON_STROKE,
   NATIVE_PHONE_SHEET_COMPACT_RATIO,
 } from "../../lib/native-phone-layout";
@@ -118,6 +117,7 @@ import type { IdeContextState, IdeFileResult } from "./ideBridge";
 
 export const DEFAULT_MODEL_PRO = "claude-sonnet-4-6";
 export const DEFAULT_MODEL_FREE = "claude-haiku-4-5-20251001";
+const PROMINENT_CHAT_BAR_HEIGHT = 56;
 
 import { EnvironmentPicker } from "./EnvironmentPicker";
 import {
@@ -544,6 +544,8 @@ function ChatInputImpl({
   presentation = "studio",
 }: ChatInputProps) {
   const composer = composerProp ?? DEFAULT_CHAT_INPUT_COMPOSER;
+  const showModelPicker =
+    composer.showModelPicker || presentation === "agent";
   const { features } = usePlatformConfig();
   const effectiveIsPro = features.billing ? isPro : true;
   const {
@@ -557,8 +559,13 @@ function ChatInputImpl({
     windowHeight,
   } = useComposerLayoutMode({
     prominent: true,
+    prominentOnWeb: presentation === "agent",
     flush,
   });
+  const useDesktopAgentAttachmentShortcut =
+    presentation === "agent" &&
+    Platform.OS === "web" &&
+    !isPhoneChrome;
   const liquidGlass = useProminentComposer && supportsLiquidGlass();
   const sendChrome = composerSendChrome(isNative || useProminentComposer);
   const inputMinHeight = sizes.inputMinHeight;
@@ -1271,6 +1278,7 @@ function ChatInputImpl({
     paddingTop: PROMINENT_COMPOSER_PADDING_TOP,
     paddingHorizontal: PROMINENT_COMPOSER_PADDING_HORIZONTAL,
     paddingBottom: PROMINENT_COMPOSER_PADDING_BOTTOM,
+    toolbarMinHeight: PROMINENT_CHAT_BAR_HEIGHT,
     easing: PROMINENT_COMPOSER_HEIGHT_EASING,
     inputHeightAnimation,
     setInputHeight: setInputHeightTarget,
@@ -1514,6 +1522,46 @@ function ChatInputImpl({
   const removeReference = useCallback((key: string) => {
     setReferences((prev) => prev.filter((ref) => referenceKey(ref) !== key));
   }, []);
+  const modelPickerInRightControls = presentation === "agent";
+  const modelPicker = showModelPicker ? (
+    <ComposerModelPicker
+      {...composerModelPickerProps({
+        currentModelId,
+        effectiveIsPro,
+        disabled,
+        nativeSheet: isPhoneChrome,
+        triggerClassName: cn(
+          useProminentComposer
+            ? "h-7 shrink-0 flex-row items-center gap-0.5 rounded-full bg-muted px-2.5"
+            : isNative
+            ? "h-8 flex-row items-center gap-1 rounded-lg px-2"
+            : "h-[22px] flex-row items-center gap-1 rounded-md px-1.5",
+          isPhoneChrome && !useProminentComposer && "min-w-0"
+        ),
+        triggerStyle: isPhoneChrome
+          ? { maxWidth: modelTriggerMaxWidth }
+          : undefined,
+        labelClassName: useProminentComposer
+          ? "text-[12px] text-foreground"
+          : isNative
+          ? "text-sm text-foreground"
+          : "text-xs text-muted-foreground",
+        chevronSize: isNative ? 12 : 8,
+        chevronColor: useProminentComposer
+          ? chatgptComposer.icon
+          : undefined,
+        chevronStrokeWidth: useProminentComposer
+          ? NATIVE_PHONE_ICON_STROKE
+          : undefined,
+        hitSlop: isNative ? 6 : undefined,
+        label: isPhoneChrome
+          ? compactNativeModelLabel(currentModelId)
+          : resolveShortName(currentModelId),
+        menuWidth: nativeModelMenuWidth,
+        onSelect: handleModelChange,
+      })}
+    />
+  ) : null;
   return (
     <View
       className={cn(
@@ -2288,9 +2336,7 @@ function ChatInputImpl({
               useProminentComposer
                 ? {
                     zIndex: PROMINENT_COMPOSER_TOOLBAR_Z_INDEX,
-                    ...(isNative
-                      ? { height: NATIVE_PHONE_COMPOSER_PILL_HEIGHT }
-                      : {}),
+                      height: PROMINENT_CHAT_BAR_HEIGHT,
                   }
                 : undefined
             }
@@ -2319,214 +2365,197 @@ function ChatInputImpl({
                 <>
                   {/* Capsule plus-menu: attach, mode, environment */}
                   <ComposerPlusTrigger
-                    onPress={() => setPlusMenuOpen(true)}
+                    onPress={
+                      useDesktopAgentAttachmentShortcut
+                        ? handleAttachClick
+                        : () => setPlusMenuOpen(true)
+                    }
                     disabled={disabled || isProcessingFiles}
                     testID="project-composer-plus"
                     color={chatgptComposer.icon}
                   />
-                  <ComposerPlusSheet
-                    visible={plusMenuOpen}
-                    onClose={closePlusMenu}
-                    expandedId={plusExpandedId}
-                    onToggleSection={togglePlusSection}
-                    maxHeight={Math.round(
-                      windowHeight * NATIVE_PHONE_SHEET_COMPACT_RATIO
-                    )}
-                    onAttach={handlePlusAttach}
-                    attachDisabled={pendingFiles.length >= MAX_FILES}
-                  >
-                    {composer.showInteractionModes ? (
+                  {!useDesktopAgentAttachmentShortcut ? (
+                    <ComposerPlusSheet
+                      visible={plusMenuOpen}
+                      onClose={closePlusMenu}
+                      expandedId={plusExpandedId}
+                      onToggleSection={togglePlusSection}
+                      maxHeight={Math.round(
+                        windowHeight * NATIVE_PHONE_SHEET_COMPACT_RATIO
+                      )}
+                      onAttach={handlePlusAttach}
+                      attachDisabled={pendingFiles.length >= MAX_FILES}
+                    >
+                      {composer.showInteractionModes ? (
+                        <ComposerPlusSection
+                          id="mode"
+                          label="Mode"
+                          value={currentInteractionConfig.label}
+                          Icon={currentInteractionConfig.Icon}
+                        >
+                          <ComposerPlusModeList
+                            modes={INTERACTION_MODES}
+                            selectedId={interactionMode}
+                            onSelect={handleInteractionModeChange}
+                            dualPlan={dualPlan}
+                            onDualPlanChange={onDualPlanChange}
+                            dualPlanDisabled={disabled}
+                            dualPlanTestId="dual-plan-toggle"
+                          />
+                        </ComposerPlusSection>
+                      ) : null}
                       <ComposerPlusSection
-                        id="mode"
-                        label="Mode"
-                        value={currentInteractionConfig.label}
-                        Icon={currentInteractionConfig.Icon}
+                        id="environment"
+                        label="Environment"
+                        Icon={Cloud}
                       >
-                        <ComposerPlusModeList
-                          modes={INTERACTION_MODES}
-                          selectedId={interactionMode}
-                          onSelect={handleInteractionModeChange}
-                          dualPlan={dualPlan}
-                          onDualPlanChange={onDualPlanChange}
-                          dualPlanDisabled={disabled}
-                          dualPlanTestId="dual-plan-toggle"
+                        <EnvironmentPicker
+                          disabled={disabled}
+                          presentation="list"
+                          listActive={plusExpandedId === "environment"}
                         />
                       </ComposerPlusSection>
-                    ) : null}
-                    <ComposerPlusSection
-                      id="environment"
-                      label="Environment"
-                      Icon={Cloud}
-                    >
-                      <EnvironmentPicker
-                        disabled={disabled}
-                        presentation="list"
-                        listActive={plusExpandedId === "environment"}
-                      />
-                    </ComposerPlusSection>
-                    {quickActions.length > 0 ? (
-                      <ComposerPlusSection
-                        id="quick-actions"
-                        label="Quick actions"
-                        Icon={Zap}
-                      >
-                        <View className="py-1">
-                          {quickActions.map((action) => (
-                            <Pressable
-                              key={action.label}
-                              onPress={() => {
-                                onQuickActionClick?.(action.prompt);
-                                closePlusMenu();
-                              }}
-                              className="flex-row items-center gap-3 p-3 rounded-lg mb-1"
-                            >
-                              <View className="w-8 items-center">
-                                <Zap
-                                  className="h-3.5 w-3.5 text-amber-400"
-                                  size={14}
-                                />
-                              </View>
-                              <View className="flex-1">
-                                <Text className="font-medium text-sm text-foreground">
-                                  {action.label}
-                                </Text>
-                                <Text
-                                  className="text-xs text-muted-foreground"
-                                  numberOfLines={1}
-                                >
-                                  {action.prompt}
-                                </Text>
-                              </View>
-                            </Pressable>
-                          ))}
-                        </View>
-                      </ComposerPlusSection>
-                    ) : null}
-                  </ComposerPlusSheet>
+                      {quickActions.length > 0 ? (
+                        <ComposerPlusSection
+                          id="quick-actions"
+                          label="Quick actions"
+                          Icon={Zap}
+                        >
+                          <View className="py-1">
+                            {quickActions.map((action) => (
+                              <Pressable
+                                key={action.label}
+                                onPress={() => {
+                                  onQuickActionClick?.(action.prompt);
+                                  closePlusMenu();
+                                }}
+                                className="flex-row items-center gap-3 p-3 rounded-lg mb-1"
+                              >
+                                <View className="w-8 items-center">
+                                  <Zap
+                                    className="h-3.5 w-3.5 text-amber-400"
+                                    size={14}
+                                  />
+                                </View>
+                                <View className="flex-1">
+                                  <Text className="font-medium text-sm text-foreground">
+                                    {action.label}
+                                  </Text>
+                                  <Text
+                                    className="text-xs text-muted-foreground"
+                                    numberOfLines={1}
+                                  >
+                                    {action.prompt}
+                                  </Text>
+                                </View>
+                              </Pressable>
+                            ))}
+                          </View>
+                        </ComposerPlusSection>
+                      ) : null}
+                    </ComposerPlusSheet>
+                  ) : null}
                 </>
               ) : (
                 <>
                   {presentation === "agent" ? (
                     <>
                       <ComposerPlusTrigger
-                        onPress={() => setPlusMenuOpen(true)}
+                        onPress={
+                          useDesktopAgentAttachmentShortcut
+                            ? handleAttachClick
+                            : () => setPlusMenuOpen(true)
+                        }
                         disabled={disabled || isProcessingFiles}
                         testID="agent-composer-plus"
                         className="h-[22px] w-[22px]"
                       >
                         <Plus className="text-muted-foreground" size={16} />
                       </ComposerPlusTrigger>
-                      <ComposerPlusSheet
-                        visible={plusMenuOpen}
-                        onClose={closePlusMenu}
-                        expandedId={plusExpandedId}
-                        onToggleSection={togglePlusSection}
-                        maxHeight={Math.round(
-                          windowHeight * NATIVE_PHONE_SHEET_COMPACT_RATIO
-                        )}
-                        onAttach={handlePlusAttach}
-                        attachDisabled={pendingFiles.length >= MAX_FILES}
-                      >
-                        {composer.showInteractionModes ? (
+                      {!useDesktopAgentAttachmentShortcut ? (
+                        <ComposerPlusSheet
+                          visible={plusMenuOpen}
+                          onClose={closePlusMenu}
+                          expandedId={plusExpandedId}
+                          onToggleSection={togglePlusSection}
+                          maxHeight={Math.round(
+                            windowHeight * NATIVE_PHONE_SHEET_COMPACT_RATIO
+                          )}
+                          onAttach={handlePlusAttach}
+                          attachDisabled={pendingFiles.length >= MAX_FILES}
+                        >
+                          {composer.showInteractionModes ? (
+                            <ComposerPlusSection
+                              id="mode"
+                              label="Mode"
+                              value={currentInteractionConfig.label}
+                              Icon={currentInteractionConfig.Icon}
+                            >
+                              <ComposerPlusModeList
+                                modes={INTERACTION_MODES}
+                                selectedId={interactionMode}
+                                onSelect={(id) => {
+                                  handleInteractionModeChange(id);
+                                  closePlusMenu();
+                                }}
+                                dualPlan={dualPlan}
+                                onDualPlanChange={onDualPlanChange}
+                                dualPlanDisabled={disabled}
+                                dualPlanTestId="dual-plan-toggle"
+                              />
+                            </ComposerPlusSection>
+                          ) : null}
                           <ComposerPlusSection
-                            id="mode"
-                            label="Mode"
-                            value={currentInteractionConfig.label}
-                            Icon={currentInteractionConfig.Icon}
+                            id="environment"
+                            label="Environment"
+                            Icon={Cloud}
                           >
-                            <ComposerPlusModeList
-                              modes={INTERACTION_MODES}
-                              selectedId={interactionMode}
-                              onSelect={(id) => {
-                                handleInteractionModeChange(id);
-                                closePlusMenu();
-                              }}
-                              dualPlan={dualPlan}
-                              onDualPlanChange={onDualPlanChange}
-                              dualPlanDisabled={disabled}
-                              dualPlanTestId="dual-plan-toggle"
+                            <EnvironmentPicker
+                              disabled={disabled}
+                              presentation="list"
+                              listActive={plusExpandedId === "environment"}
                             />
                           </ComposerPlusSection>
-                        ) : null}
-                        {composer.showModelPicker ? (
-                          <ComposerPlusSection
-                            id="model"
-                            label="Model"
-                            value={resolveShortName(currentModelId)}
-                            Icon={Sparkles}
-                          >
-                            <View className="px-3 pb-3">
-                              <ComposerModelPicker
-                                {...composerModelPickerProps({
-                                  currentModelId,
-                                  effectiveIsPro,
-                                  disabled,
-                                  nativeSheet: false,
-                                  triggerClassName:
-                                    "h-9 w-full flex-row items-center justify-between rounded-lg bg-muted/50 px-3",
-                                  labelClassName: "text-sm text-foreground",
-                                  chevronSize: 14,
-                                  label: resolveShortName(currentModelId),
-                                  menuWidth: nativeModelMenuWidth,
-                                  onSelect: (modelId) => {
-                                    handleModelChange(modelId);
-                                    closePlusMenu();
-                                  },
-                                })}
-                              />
-                            </View>
-                          </ComposerPlusSection>
-                        ) : null}
-                        <ComposerPlusSection
-                          id="environment"
-                          label="Environment"
-                          Icon={Cloud}
-                        >
-                          <EnvironmentPicker
-                            disabled={disabled}
-                            presentation="list"
-                            listActive={plusExpandedId === "environment"}
-                          />
-                        </ComposerPlusSection>
-                        {quickActions.length > 0 ? (
-                          <ComposerPlusSection
-                            id="quick-actions"
-                            label="Quick actions"
-                            Icon={Zap}
-                          >
-                            <View className="py-1">
-                              {quickActions.map((action) => (
-                                <Pressable
-                                  key={action.label}
-                                  onPress={() => {
-                                    onQuickActionClick?.(action.prompt);
-                                    closePlusMenu();
-                                  }}
-                                  className="flex-row items-center gap-3 p-3 rounded-lg mb-1"
-                                >
-                                  <View className="w-8 items-center">
-                                    <Zap
-                                      className="h-3.5 w-3.5 text-amber-400"
-                                      size={14}
-                                    />
-                                  </View>
-                                  <View className="flex-1">
-                                    <Text className="font-medium text-sm text-foreground">
-                                      {action.label}
-                                    </Text>
-                                    <Text
-                                      className="text-xs text-muted-foreground"
-                                      numberOfLines={1}
-                                    >
-                                      {action.prompt}
-                                    </Text>
-                                  </View>
-                                </Pressable>
-                              ))}
-                            </View>
-                          </ComposerPlusSection>
-                        ) : null}
-                      </ComposerPlusSheet>
+                          {quickActions.length > 0 ? (
+                            <ComposerPlusSection
+                              id="quick-actions"
+                              label="Quick actions"
+                              Icon={Zap}
+                            >
+                              <View className="py-1">
+                                {quickActions.map((action) => (
+                                  <Pressable
+                                    key={action.label}
+                                    onPress={() => {
+                                      onQuickActionClick?.(action.prompt);
+                                      closePlusMenu();
+                                    }}
+                                    className="flex-row items-center gap-3 p-3 rounded-lg mb-1"
+                                  >
+                                    <View className="w-8 items-center">
+                                      <Zap
+                                        className="h-3.5 w-3.5 text-amber-400"
+                                        size={14}
+                                      />
+                                    </View>
+                                    <View className="flex-1">
+                                      <Text className="font-medium text-sm text-foreground">
+                                        {action.label}
+                                      </Text>
+                                      <Text
+                                        className="text-xs text-muted-foreground"
+                                        numberOfLines={1}
+                                      >
+                                        {action.prompt}
+                                      </Text>
+                                    </View>
+                                  </Pressable>
+                                ))}
+                              </View>
+                            </ComposerPlusSection>
+                          ) : null}
+                        </ComposerPlusSheet>
+                      ) : null}
                     </>
                   ) : null}
                   {composer.showInteractionModes && presentation !== "agent" ? (
@@ -2797,46 +2826,7 @@ function ChatInputImpl({
                 </>
               )}
 
-              {/* Model selector — native phone uses a bottom sheet like the plus menu. */}
-              {composer.showModelPicker && presentation !== "agent" ? (
-                <ComposerModelPicker
-                  {...composerModelPickerProps({
-                    currentModelId,
-                    effectiveIsPro,
-                    disabled,
-                    nativeSheet: isPhoneChrome,
-                    triggerClassName: cn(
-                      useProminentComposer
-                        ? "h-7 shrink-0 flex-row items-center gap-0.5 rounded-full bg-muted px-2.5"
-                        : isNative
-                        ? "h-8 flex-row items-center gap-1 rounded-lg px-2"
-                        : "h-[22px] flex-row items-center gap-1 rounded-md px-1.5",
-                      isPhoneChrome && !useProminentComposer && "min-w-0"
-                    ),
-                    triggerStyle: isPhoneChrome
-                      ? { maxWidth: modelTriggerMaxWidth }
-                      : undefined,
-                    labelClassName: useProminentComposer
-                      ? "text-[12px] text-foreground"
-                      : isNative
-                      ? "text-sm text-foreground"
-                      : "text-xs text-muted-foreground",
-                    chevronSize: isNative ? 12 : 8,
-                    chevronColor: useProminentComposer
-                      ? chatgptComposer.icon
-                      : undefined,
-                    chevronStrokeWidth: useProminentComposer
-                      ? NATIVE_PHONE_ICON_STROKE
-                      : undefined,
-                    hitSlop: isNative ? 6 : undefined,
-                    label: isPhoneChrome
-                      ? compactNativeModelLabel(currentModelId)
-                      : resolveShortName(currentModelId),
-                    menuWidth: nativeModelMenuWidth,
-                    onSelect: handleModelChange,
-                  })}
-                />
-              ) : null}
+              {!modelPickerInRightControls ? modelPicker : null}
             </View>
 
             {useProminentComposer ? (
@@ -2863,6 +2853,7 @@ function ChatInputImpl({
                     : undefined
                 }
               >
+                {modelPickerInRightControls ? modelPicker : null}
                 <VoiceWaveform />
                 <Pressable
                   onPress={() => voiceInput.toggleRecording().catch(() => {})}
@@ -2951,6 +2942,7 @@ function ChatInputImpl({
                   </>
                 )}
 
+                {modelPickerInRightControls ? modelPicker : null}
                 {isStreaming ? (
                   <>
                     <Pressable
@@ -2965,7 +2957,9 @@ function ChatInputImpl({
                     >
                       <Square
                         className="text-destructive-foreground m-auto"
-                        size={isNative || useProminentComposer ? 18 : 10}
+                        size={
+                          isNative || useProminentComposer ? 18 : 10
+                        }
                       />
                     </Pressable>
                     <ComposerSendButton
@@ -3059,7 +3053,13 @@ function ChatInputImpl({
                           ? NATIVE_PHONE_ICON_STROKE
                           : undefined
                       }
-                      size={useProminentComposer ? 20 : isNative ? 18 : 14}
+                      size={
+                        useProminentComposer
+                          ? 20
+                          : isNative
+                          ? 18
+                          : 14
+                      }
                     />
                   </Pressable>
                 ) : null}

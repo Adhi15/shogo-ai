@@ -33,7 +33,7 @@ describe('workspaceExperience', () => {
     expect(exp.showSideChatsNav).toBe(true)
     expect(exp.bottomTabs).toEqual(['chat', 'canvases', 'activity', 'goals', 'more'])
     expect(exp.chatReturnsToProjectContext).toBe(false)
-    expect(exp.composer.showModelPicker).toBe(false)
+    expect(exp.composer.showModelPicker).toBe(true)
     expect(exp.composer.showInteractionModes).toBe(false)
     expect(exp.composer.forcedMode).toBe('agent')
   })

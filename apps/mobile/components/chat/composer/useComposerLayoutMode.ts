@@ -51,6 +51,8 @@ function nativeModelMenuWidth(windowWidth: number): number {
 type ComposerLayoutOptions = {
   /** Enables the phone-prominent layout when phone chrome is available. */
   prominent?: boolean;
+  /** Uses the same prominent composer on wide web agent surfaces. */
+  prominentOnWeb?: boolean;
   /** Inline edit mode intentionally stays in the regular composer layout. */
   flush?: boolean;
   /** Home's compact composer has different non-prominent bounds. */
@@ -60,6 +62,7 @@ type ComposerLayoutOptions = {
 
 export function useComposerLayoutMode({
   prominent = false,
+  prominentOnWeb = false,
   flush = false,
   compact = false,
   colorScheme,
@@ -68,7 +71,10 @@ export function useComposerLayoutMode({
   const resolvedTheme = useResolvedTheme();
   const isNative = Platform.OS !== "web";
   const isPhoneChrome = isPhoneLayout(width, height);
-  const useProminentComposer = isPhoneChrome && prominent && !flush;
+  const useProminentComposer =
+    prominent &&
+    !flush &&
+    (isPhoneChrome || (Platform.OS === "web" && prominentOnWeb));
   const variant: ComposerVariant = useProminentComposer
     ? "prominent"
     : isNative
