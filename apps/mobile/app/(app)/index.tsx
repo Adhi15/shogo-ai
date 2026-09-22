@@ -914,24 +914,9 @@ export const HomeScreen = observer(function HomeScreen({
   const workspaceAgentChatEnabled =
     isWorkspaceRuntimeEnabled() &&
     isNarrowAgentSurface &&
-    currentExperience.kind === 'personal' &&
-    (localMode || features.mobileAgentShell)
+    currentExperience.kind === 'personal'
   if (!forceBuilder && workspaceAgentChatEnabled) {
     return <WorkspaceAgentChatScreen key={currentWorkspace?.id ?? 'workspace-loading'} />
-  }
-
-  // `features.personalShell` is an instance-wide kill switch (default on):
-  // a super-admin can fall back every personal workspace to the standard
-  // builder home without a deploy if the companion-shell rollout needs to
-  // pause. See the API's `/api/config` handler and `(admin)/general.tsx`.
-  if (
-    !forceBuilder &&
-    isWorkspaceRuntimeEnabled() &&
-    isNarrowAgentSurface &&
-    features.personalShell &&
-    currentExperience.homeScreen === 'companion'
-  ) {
-    return <WorkspaceAgentChatScreen />
   }
 
   const greeting = (

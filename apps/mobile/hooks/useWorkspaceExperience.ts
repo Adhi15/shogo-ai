@@ -4,7 +4,6 @@ import { useMemo } from 'react'
 import { Platform, useWindowDimensions } from 'react-native'
 import { workspaceExperience, type WorkspaceExperience } from '@shogo/shared-app'
 import { useActiveWorkspace } from './useActiveWorkspace'
-import { usePlatformConfig } from '../lib/platform-config'
 import { WEB_WIDE_MIN_WIDTH } from '../lib/native-phone-layout'
 
 /**
@@ -16,22 +15,16 @@ import { WEB_WIDE_MIN_WIDTH } from '../lib/native-phone-layout'
  * presentation. See `workspaceExperience()` in `@shogo/shared-app` for the
  * descriptor and rationale.
  *
- * Honors the server-issued `personalShell` kill switch (`/api/config`): when
- * off, every personal workspace is described as `team` so the whole shell
- * (home, nav, composer) degrades consistently rather than just the home
- * route, in case the companion-shell rollout needs to pause instance-wide.
  */
 export function useWorkspaceExperience(): WorkspaceExperience {
   const workspace = useActiveWorkspace()
-  const { features } = usePlatformConfig()
   const { width } = useWindowDimensions()
   const rawKind = (workspace as { kind?: string } | null)?.kind
-  const kind = rawKind === 'personal' && !features.personalShell ? 'team' : rawKind
   // The companion experience is mobile-only. Wide web surfaces preserve the
   // established builder navigation even for a personal workspace.
   const usesMobileExperience =
     Platform.OS !== 'web' || width < WEB_WIDE_MIN_WIDTH
-  const presentationKind = usesMobileExperience ? kind : 'team'
+  const presentationKind = usesMobileExperience ? rawKind : 'team'
   return useMemo(
     () => workspaceExperience(presentationKind),
     [presentationKind],

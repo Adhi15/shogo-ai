@@ -64,7 +64,7 @@ csMark("app:layout:module-load");
 function AppLayoutInner() {
   csMark("app:layout:render");
   const { isAuthenticated, isLoading, user, refreshSession } = useAuth();
-  const { localMode, features } = usePlatformConfig();
+  const { localMode } = usePlatformConfig();
   // The workspace agent chrome is mobile-only. Wide web surfaces always keep
   // the established AppSidebar + plain project view, regardless of workspace
   // kind. `useWorkspaceExperience()` defaults to `'team'` until the active
@@ -104,8 +104,7 @@ function AppLayoutInner() {
   const isPersonalWorkspace = experience.kind === "personal";
   const mobileAgentShellEnabled =
     isWorkspaceRuntimeEnabled() &&
-    isPersonalWorkspace &&
-    (localMode || features.mobileAgentShell);
+    isPersonalWorkspace;
   const isHomePage =
     pathname === "/" || pathname === "/(app)" || pathname === "/(app)/index";
   const isWorkspaceChatRoute =
