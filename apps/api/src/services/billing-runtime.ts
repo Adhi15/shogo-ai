@@ -14,10 +14,19 @@ if (process.env.SHOGO_LOCAL_MODE !== 'true') {
 }
 
 export const SYSTEM_WORKSPACE_ID = cloudBilling?.SYSTEM_WORKSPACE_ID ?? 'local-system'
+// Shapes below MUST match `billing.service.ts`'s `BalanceCheck` (`{ ok, reason? }`)
+// and `usageLimitErrorPayload`'s `{ code, message }` return value — callers
+// (project-chat.ts, workspace-chat.ts) destructure those exact fields and
+// `c.json()` silently drops `undefined` properties, so a shape mismatch here
+// used to produce a body of literally `{"error":{}}` on every local-mode chat
+// request instead of ever actually blocking on usage.
 export const checkUsageBalance = (...args: any[]) =>
-  cloudBilling?.checkUsageBalance?.(...args) ?? Promise.resolve({ allowed: true })
+  cloudBilling?.checkUsageBalance?.(...args) ?? Promise.resolve({ ok: true })
 export const usageLimitErrorPayload = (...args: any[]) =>
-  cloudBilling?.usageLimitErrorPayload?.(...args) ?? { error: 'usage_limit' }
+  cloudBilling?.usageLimitErrorPayload?.(...args) ?? {
+    code: 'usage_limit_reached',
+    message: "You've reached your usage limit. Enable usage-based pricing or upgrade your plan to continue.",
+  }
 export const hasAdvancedModelAccess = (...args: any[]) =>
   cloudBilling?.hasAdvancedModelAccess?.(...args) ?? Promise.resolve(true)
 export const allocateMonthlyIncluded = (...args: any[]) =>

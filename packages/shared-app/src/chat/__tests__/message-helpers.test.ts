@@ -129,6 +129,16 @@ describe('formatErrorMessage', () => {
   it('returns raw message when not JSON and no pattern match', () => {
     expect(formatErrorMessage('Some random error')).toBe('Some random error')
   })
+
+  it('falls back to a generic message for a JSON object with no usable code/message', () => {
+    // Regression: a server-side bug (a local-mode billing stub returning
+    // `{ code: undefined, message: undefined }`, since fixed) produced
+    // exactly this body via `JSON.stringify` dropping undefined fields.
+    // Users must never see the raw JSON — it must resolve to something
+    // actionable instead.
+    expect(formatErrorMessage('{"error":{}}')).toBe('Something went wrong. Please try again.')
+    expect(formatErrorMessage('{}')).toBe('Something went wrong. Please try again.')
+  })
 })
 
 describe('formatToolName', () => {

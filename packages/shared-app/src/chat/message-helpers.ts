@@ -144,6 +144,14 @@ export function formatErrorMessage(rawMessage: string): string {
     if (parsed?.message) {
       return stripInternalErrorMarkers(parsed.message)
     }
+    // Parsed successfully but had none of the shapes above (e.g. a server
+    // bug that serialized an error object into `{"error":{}}` — every field
+    // was `undefined` and JSON.stringify silently dropped them). Surfacing
+    // the raw JSON here would just show the user a confusing `{"error":{}}`
+    // banner instead of an actionable message, so fall back to a generic one.
+    if (parsed && typeof parsed === 'object') {
+      return 'Something went wrong. Please try again.'
+    }
   } catch {
     // Not JSON
   }

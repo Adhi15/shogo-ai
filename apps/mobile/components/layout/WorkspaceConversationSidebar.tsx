@@ -35,11 +35,11 @@ import {
   type ProjectChatListItem,
 } from "../../lib/project-chat-sessions";
 import {
-  getKnownPrimaryWorkspaceSession,
   subscribePrimaryWorkspaceSession,
 } from "../workspace/workspace-agent-session-bus";
 import { WorkspaceSidebarSection } from "./WorkspaceSidebarSection";
 import { ChatTreeItem } from "./sidebar/ChatTreeItem";
+import { ProjectCreationSheet } from "../project/ProjectCreationSheet";
 
 const PROJECT_CHAT_INITIAL_COUNT = PROJECT_CHAT_PAGE_SIZE;
 
@@ -91,10 +91,10 @@ function WorkspaceConversationSidebarView() {
     : null;
 
   const [sessions, setSessions] = useState<WorkspaceSession[]>([]);
-  const [primarySessionId, setPrimarySessionId] = useState<string | null>(null);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [creatingSideChat, setCreatingSideChat] = useState(false);
+  const [projectCreationOpen, setProjectCreationOpen] = useState(false);
   const [chatQuery, setChatQuery] = useState("");
   const [sideChatsExpanded, setSideChatsExpanded] = useState(true);
   const [projectsExpanded, setProjectsExpanded] = useState(true);
@@ -107,7 +107,7 @@ function WorkspaceConversationSidebarView() {
   >({});
 
   const loadWorkspaceSessions = useCallback(
-    async (publishedPrimaryId?: string | null) => {
+    async () => {
       if (!workspace?.id) return;
       setSessionsLoading(true);
       try {
@@ -116,11 +116,6 @@ function WorkspaceConversationSidebarView() {
           workspace.id
         );
         setSessions(nextSessions);
-        setPrimarySessionId(
-          publishedPrimaryId ??
-            nextSessions.find((session) => session.isPrimary)?.id ??
-            null
-        );
       } finally {
         setSessionsLoading(false);
       }
@@ -141,7 +136,6 @@ function WorkspaceConversationSidebarView() {
   useEffect(() => {
     if (!workspace?.id) {
       setSessions([]);
-      setPrimarySessionId(null);
       setProjectChats({});
       setExpandedProjectIds(new Set());
       return;
@@ -149,16 +143,13 @@ function WorkspaceConversationSidebarView() {
 
     setProjectChats({});
     setExpandedProjectIds(new Set());
-    void loadWorkspaceSessions(
-      getKnownPrimaryWorkspaceSession(workspace.id)
-    ).catch(() => {
+    void loadWorkspaceSessions().catch(() => {
       setSessions([]);
-      setPrimarySessionId(null);
     });
     void loadWorkspaceProjects().catch(() => undefined);
 
-    return subscribePrimaryWorkspaceSession(workspace.id, (sessionId) => {
-      void loadWorkspaceSessions(sessionId).catch(() => undefined);
+    return subscribePrimaryWorkspaceSession(workspace.id, () => {
+      void loadWorkspaceSessions().catch(() => undefined);
     });
   }, [loadWorkspaceProjects, loadWorkspaceSessions, workspace?.id]);
 
@@ -578,14 +569,7 @@ function WorkspaceConversationSidebarView() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Create a new project"
-                onPress={() =>
-                  router.push({
-                    pathname: "/(app)/new-project",
-                    params: primarySessionId
-                      ? { chatSessionId: primarySessionId }
-                      : {},
-                  } as any)
-                }
+                onPress={() => setProjectCreationOpen(true)}
                 className="h-11 w-11 items-center justify-center rounded-lg active:bg-muted"
               >
                 <Plus size={17} className="text-foreground" />
@@ -764,6 +748,10 @@ function WorkspaceConversationSidebarView() {
           </WorkspaceSidebarSection>
         </View>
       </ScrollView>
+      <ProjectCreationSheet
+        visible={projectCreationOpen}
+        onClose={() => setProjectCreationOpen(false)}
+      />
     </View>
   );
 }

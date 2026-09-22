@@ -80,7 +80,6 @@ import {
   Languages,
   Play,
   Cloud,
-  SlidersHorizontal,
 } from "lucide-react-native";
 import { useVoiceInput } from "./useVoiceInput";
 import { VoiceWaveform } from "./VoiceWaveform";
@@ -694,7 +693,6 @@ function ChatInputImpl({
   );
 
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
-  const [agentControlsOpen, setAgentControlsOpen] = useState(false);
 
   // Long-text pastes are extracted out of the TextInput and rendered as
   // compact ChatGPT-style file chips. The input stays editable so the user
@@ -2409,119 +2407,127 @@ function ChatInputImpl({
               ) : (
                 <>
                   {presentation === "agent" ? (
-                    <Popover
-                      placement="top"
-                      size="xs"
-                      isOpen={agentControlsOpen}
-                      onOpen={() => setAgentControlsOpen(true)}
-                      onClose={() => setAgentControlsOpen(false)}
-                      trigger={(triggerProps) => (
-                        <WebTooltip label="Advanced controls">
-                          <Pressable
-                            {...triggerProps}
-                            disabled={disabled}
-                            accessibilityLabel="Advanced controls"
-                            className={cn(
-                              "h-[22px] w-[22px] items-center justify-center rounded-md",
-                              agentControlsOpen
-                                ? "bg-primary/12"
-                                : "bg-muted/50"
-                            )}
-                          >
-                            <SlidersHorizontal
-                              className={
-                                agentControlsOpen
-                                  ? "text-primary"
-                                  : "text-muted-foreground"
-                              }
-                              size={14}
-                            />
-                          </Pressable>
-                        </WebTooltip>
-                      )}
-                    >
-                      <PopoverBackdrop />
-                      <PopoverContent className="w-[248px] p-2">
+                    <>
+                      <ComposerPlusTrigger
+                        onPress={() => setPlusMenuOpen(true)}
+                        disabled={disabled || isProcessingFiles}
+                        testID="agent-composer-plus"
+                        className="h-[22px] w-[22px]"
+                      >
+                        <Plus className="text-muted-foreground" size={16} />
+                      </ComposerPlusTrigger>
+                      <ComposerPlusSheet
+                        visible={plusMenuOpen}
+                        onClose={closePlusMenu}
+                        expandedId={plusExpandedId}
+                        onToggleSection={togglePlusSection}
+                        maxHeight={Math.round(
+                          windowHeight * NATIVE_PHONE_SHEET_COMPACT_RATIO
+                        )}
+                        onAttach={handlePlusAttach}
+                        attachDisabled={pendingFiles.length >= MAX_FILES}
+                      >
                         {composer.showInteractionModes ? (
-                          <>
-                            <Text className="px-1 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                              Mode
-                            </Text>
-                            <View className="flex-row gap-1">
-                              {INTERACTION_MODES.map((mode) => (
+                          <ComposerPlusSection
+                            id="mode"
+                            label="Mode"
+                            value={currentInteractionConfig.label}
+                            Icon={currentInteractionConfig.Icon}
+                          >
+                            <ComposerPlusModeList
+                              modes={INTERACTION_MODES}
+                              selectedId={interactionMode}
+                              onSelect={(id) => {
+                                handleInteractionModeChange(id);
+                                closePlusMenu();
+                              }}
+                              dualPlan={dualPlan}
+                              onDualPlanChange={onDualPlanChange}
+                              dualPlanDisabled={disabled}
+                              dualPlanTestId="dual-plan-toggle"
+                            />
+                          </ComposerPlusSection>
+                        ) : null}
+                        {composer.showModelPicker ? (
+                          <ComposerPlusSection
+                            id="model"
+                            label="Model"
+                            value={resolveShortName(currentModelId)}
+                            Icon={Sparkles}
+                          >
+                            <View className="px-3 pb-3">
+                              <ComposerModelPicker
+                                {...composerModelPickerProps({
+                                  currentModelId,
+                                  effectiveIsPro,
+                                  disabled,
+                                  nativeSheet: false,
+                                  triggerClassName:
+                                    "h-9 w-full flex-row items-center justify-between rounded-lg bg-muted/50 px-3",
+                                  labelClassName: "text-sm text-foreground",
+                                  chevronSize: 14,
+                                  label: resolveShortName(currentModelId),
+                                  menuWidth: nativeModelMenuWidth,
+                                  onSelect: (modelId) => {
+                                    handleModelChange(modelId);
+                                    closePlusMenu();
+                                  },
+                                })}
+                              />
+                            </View>
+                          </ComposerPlusSection>
+                        ) : null}
+                        <ComposerPlusSection
+                          id="environment"
+                          label="Environment"
+                          Icon={Cloud}
+                        >
+                          <EnvironmentPicker
+                            disabled={disabled}
+                            presentation="list"
+                            listActive={plusExpandedId === "environment"}
+                          />
+                        </ComposerPlusSection>
+                        {quickActions.length > 0 ? (
+                          <ComposerPlusSection
+                            id="quick-actions"
+                            label="Quick actions"
+                            Icon={Zap}
+                          >
+                            <View className="py-1">
+                              {quickActions.map((action) => (
                                 <Pressable
-                                  key={mode.id}
+                                  key={action.label}
                                   onPress={() => {
-                                    handleInteractionModeChange(mode.id);
-                                    setAgentControlsOpen(false);
+                                    onQuickActionClick?.(action.prompt);
+                                    closePlusMenu();
                                   }}
-                                  className={cn(
-                                    "flex-1 items-center rounded-md px-1.5 py-1.5",
-                                    interactionMode === mode.id
-                                      ? "bg-primary/12"
-                                      : "bg-muted/50"
-                                  )}
+                                  className="flex-row items-center gap-3 p-3 rounded-lg mb-1"
                                 >
-                                  <Text
-                                    className={cn(
-                                      "text-xs",
-                                      interactionMode === mode.id
-                                        ? "text-primary"
-                                        : "text-muted-foreground"
-                                    )}
-                                  >
-                                    {mode.label}
-                                  </Text>
+                                  <View className="w-8 items-center">
+                                    <Zap
+                                      className="h-3.5 w-3.5 text-amber-400"
+                                      size={14}
+                                    />
+                                  </View>
+                                  <View className="flex-1">
+                                    <Text className="font-medium text-sm text-foreground">
+                                      {action.label}
+                                    </Text>
+                                    <Text
+                                      className="text-xs text-muted-foreground"
+                                      numberOfLines={1}
+                                    >
+                                      {action.prompt}
+                                    </Text>
+                                  </View>
                                 </Pressable>
                               ))}
                             </View>
-                          </>
+                          </ComposerPlusSection>
                         ) : null}
-                        <View className="mt-2 border-t border-border/60 pt-2">
-                          <Text className="px-1 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                            Model
-                          </Text>
-                          {composer.showModelPicker ? (
-                            <ComposerModelPicker
-                              {...composerModelPickerProps({
-                                currentModelId,
-                                effectiveIsPro,
-                                disabled,
-                                nativeSheet: false,
-                                triggerClassName:
-                                  "h-8 w-full flex-row items-center justify-between rounded-md bg-muted px-2",
-                                labelClassName: "text-xs text-foreground",
-                                chevronSize: 12,
-                                label: resolveShortName(currentModelId),
-                                menuWidth: nativeModelMenuWidth,
-                                onSelect: handleModelChange,
-                              })}
-                            />
-                          ) : null}
-                        </View>
-                        <View className="mt-2 border-t border-border/60 pt-2">
-                          <EnvironmentPicker disabled={disabled} />
-                        </View>
-                        {quickActions.length > 0 ? (
-                          <View className="mt-2 border-t border-border/60 pt-2">
-                            {quickActions.map((action) => (
-                              <Pressable
-                                key={action.label}
-                                onPress={() => {
-                                  onQuickActionClick?.(action.prompt);
-                                  setAgentControlsOpen(false);
-                                }}
-                                className="rounded-md px-2 py-1.5 active:bg-muted"
-                              >
-                                <Text className="text-xs text-foreground">
-                                  {action.label}
-                                </Text>
-                              </Pressable>
-                            ))}
-                          </View>
-                        ) : null}
-                      </PopoverContent>
-                    </Popover>
+                      </ComposerPlusSheet>
+                    </>
                   ) : null}
                   {composer.showInteractionModes && presentation !== "agent" ? (
                     <>
@@ -2902,36 +2908,46 @@ function ChatInputImpl({
                       </DockChip>
                     )}
 
-                    <Pressable
-                      onPress={handleAttachClick}
-                      hitSlop={isNative ? 4 : undefined}
-                      disabled={
-                        disabled ||
-                        isProcessingFiles ||
-                        pendingFiles.length >= MAX_FILES
-                      }
-                      role="button"
-                      accessibilityLabel="Attach file"
-                      className={cn(
-                        "rounded-full items-center justify-center active:opacity-70",
-                        isNative
-                          ? "h-9 w-9 border border-border/45 bg-muted/30"
-                          : "min-h-5 min-w-5"
-                      )}
-                      android_ripple={{ color: "rgba(128,128,128,0.25)" }}
-                    >
-                      <Plus
-                        className={cn(
-                          "h-4 w-4",
+                    {/* The "agent" presentation already has a left-side "+"
+                        (ComposerPlusTrigger above) whose sheet includes an
+                        Attach action — rendering this second "+" here too
+                        gave the composer two visually-identical plus buttons
+                        with different behavior (menu vs. direct file picker),
+                        which just confused people. Only render this direct
+                        attach shortcut for presentations that don't have the
+                        left "+" menu. */}
+                    {presentation !== "agent" && (
+                      <Pressable
+                        onPress={handleAttachClick}
+                        hitSlop={isNative ? 4 : undefined}
+                        disabled={
                           disabled ||
-                            isProcessingFiles ||
-                            pendingFiles.length >= MAX_FILES
-                            ? "text-muted-foreground/40"
-                            : "text-muted-foreground"
+                          isProcessingFiles ||
+                          pendingFiles.length >= MAX_FILES
+                        }
+                        role="button"
+                        accessibilityLabel="Attach file"
+                        className={cn(
+                          "rounded-full items-center justify-center active:opacity-70",
+                          isNative
+                            ? "h-9 w-9 border border-border/45 bg-muted/30"
+                            : "min-h-5 min-w-5"
                         )}
-                        size={isNative ? 18 : 12}
-                      />
-                    </Pressable>
+                        android_ripple={{ color: "rgba(128,128,128,0.25)" }}
+                      >
+                        <Plus
+                          className={cn(
+                            "h-4 w-4",
+                            disabled ||
+                              isProcessingFiles ||
+                              pendingFiles.length >= MAX_FILES
+                              ? "text-muted-foreground/40"
+                              : "text-muted-foreground"
+                          )}
+                          size={isNative ? 18 : 12}
+                        />
+                      </Pressable>
+                    )}
                   </>
                 )}
 

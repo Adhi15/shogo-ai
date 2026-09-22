@@ -50,6 +50,7 @@ import {
 } from "../ui/LiquidGlassBackdrop";
 import { MobileWorkspaceChromeProvider } from "./MobileWorkspaceChromeContext";
 import { ShogoLogoMark } from "../branding/ShogoLogoMark";
+import { ProjectCreationSheet } from "../project/ProjectCreationSheet";
 
 interface MobileWorkspaceShellProps {
   children: ReactNode;
@@ -73,6 +74,7 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
   const projects = useProjectCollection();
   const prefersReducedMotion = useReducedMotion();
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [projectCreationOpen, setProjectCreationOpen] = useState(false);
   const drawerProgress = useRef(new Animated.Value(0)).current;
   const [sessions, setSessions] = useState<
     Array<{
@@ -437,9 +439,10 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel="Create a new project"
-                          onPress={() =>
-                            router.push("/(app)/new-project" as any)
-                          }
+                          onPress={() => {
+                            setSessionsOpen(false);
+                            setProjectCreationOpen(true);
+                          }}
                           className="h-11 w-11 items-center justify-center rounded-lg active:bg-muted"
                         >
                           <Plus size={17} color={icon.color} />
@@ -558,6 +561,10 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
             </Animated.View>
           </View>
         </Modal>
+        <ProjectCreationSheet
+          visible={projectCreationOpen}
+          onClose={() => setProjectCreationOpen(false)}
+        />
       </View>
     </MobileWorkspaceChromeProvider>
   );
