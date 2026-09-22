@@ -136,6 +136,8 @@ function AppLayoutInner() {
   const isSearchPage = pathname === "/search" || pathname === "/(app)/search";
   const isProjectChatsPage =
     pathname === "/project-chats" || pathname === "/(app)/project-chats";
+  const isAIModelsPage =
+    pathname === "/ai-models" || pathname === "/(app)/ai-models";
   const isNonChatWorkspacePage = [
     "/tasks",
     "/activity",
@@ -235,6 +237,7 @@ function AppLayoutInner() {
     isAccountPage ||
     isSearchPage ||
     isProjectChatsPage ||
+    isAIModelsPage ||
     isNonChatWorkspacePage;
   // The companion mobile shell owns its own drawer and swipe gesture. Keep
   // the legacy sheet drawer inactive there so an edge swipe cannot reveal the
@@ -402,7 +405,9 @@ function AppLayoutInner() {
           <AppHeader onMenuPress={toggleDrawer} menuOpen={drawerOpen} />
         ) : null
       }
-      bottomNav={!isWide && !isIdeEmbed ? <MobileBottomNav /> : null}
+      bottomNav={
+        !isWide && !isIdeEmbed && !isAIModelsPage ? <MobileBottomNav /> : null
+      }
       drawer={drawer}
     >
       {localMode && !isIdeEmbed ? <RecordingIndicator /> : null}

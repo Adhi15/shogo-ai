@@ -565,6 +565,10 @@ function ChatInputImpl({
   const liquidGlass = useProminentComposer && supportsLiquidGlass();
   const sendChrome = composerSendChrome(isNative || useProminentComposer);
   const mobileChatText = usesMobileWorkspaceChrome || useProminentComposer;
+  const showModelPicker =
+    composer.showModelPicker || usesMobileWorkspaceChrome;
+  const showInlineMobileModelPicker =
+    showModelPicker && (useProminentComposer || usesMobileWorkspaceChrome);
   const composerFontSize = mobileChatText ? 16 : 14;
   const composerLineHeight = mobileChatText ? 24 : 20;
   const inputMinHeight = sizes.inputMinHeight;
@@ -2495,7 +2499,7 @@ function ChatInputImpl({
                           <Text className="px-1 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                             Model
                           </Text>
-                          {composer.showModelPicker ? (
+                          {showModelPicker ? (
                             <ComposerModelPicker
                               {...composerModelPickerProps({
                                 currentModelId,
@@ -2806,7 +2810,9 @@ function ChatInputImpl({
               )}
 
               {/* Model selector — native phone uses a bottom sheet like the plus menu. */}
-              {composer.showModelPicker && presentation !== "agent" ? (
+              {showModelPicker &&
+              presentation !== "agent" &&
+              !showInlineMobileModelPicker ? (
                 <ComposerModelPicker
                   {...composerModelPickerProps({
                     currentModelId,
@@ -2901,6 +2907,27 @@ function ChatInputImpl({
                     : undefined
                 }
               >
+                {showInlineMobileModelPicker ? (
+                  <ComposerModelPicker
+                    {...composerModelPickerProps({
+                      currentModelId,
+                      effectiveIsPro,
+                      disabled,
+                      nativeSheet: isPhoneChrome,
+                      triggerClassName:
+                        "h-7 shrink-0 flex-row items-center gap-0.5 rounded-full bg-muted px-2.5",
+                      triggerStyle: { maxWidth: modelTriggerMaxWidth },
+                      labelClassName: "text-[12px] text-foreground",
+                      chevronSize: 12,
+                      chevronColor: chatgptComposer.icon,
+                      chevronStrokeWidth: NATIVE_PHONE_ICON_STROKE,
+                      hitSlop: 6,
+                      label: compactNativeModelLabel(currentModelId),
+                      menuWidth: nativeModelMenuWidth,
+                      onSelect: handleModelChange,
+                    })}
+                  />
+                ) : null}
                 {useProminentComposer ? null : (
                   <>
                     <DockChipRail isNative={isNative} />
