@@ -29,6 +29,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Slot, usePathname, useRouter } from "expo-router";
+import { observer } from "mobx-react-lite";
 import { useAuth } from "../../contexts/auth";
 import {
   isWorkspaceRuntimeEnabled,
@@ -62,7 +63,7 @@ import { projectSidebarEvents } from "../../lib/project-sidebar-events";
 
 csMark("app:layout:module-load");
 
-function AppLayoutInner() {
+const AppLayoutInner = observer(function AppLayoutInner() {
   csMark("app:layout:render");
   const { isAuthenticated, isLoading, user, refreshSession } = useAuth();
   const { localMode, features } = usePlatformConfig();
@@ -408,7 +409,7 @@ function AppLayoutInner() {
       )}
     </NativeSheetDrawerShell>
   );
-}
+});
 
 /**
  * `AppLayoutInner` needs `useWorkspaceExperience()` (workspace kind) to

@@ -67,10 +67,9 @@ export function PersonalAgentHeader({
                 {profile.statusText || profile.tagline || 'Ready when you are'}
               </Text>
             </View>
-            <ChevronDown
-              size={17}
-              className={cn('text-muted-foreground', menuOpen && 'rotate-180')}
-            />
+            <View className={cn(menuOpen && 'rotate-180')}>
+              <ChevronDown size={17} className="text-muted-foreground" />
+            </View>
           </Pressable>
         )}
       />

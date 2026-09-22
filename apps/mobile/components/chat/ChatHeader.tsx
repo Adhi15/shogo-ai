@@ -45,12 +45,9 @@ export function ChatHeader({
         className="shrink-0 p-2 rounded-md active:bg-accent"
         accessibilityLabel={isCollapsed ? "Expand chat" : "Collapse chat"}
       >
-        <ChevronDown
-          className={cn(
-            "h-4 w-4 text-foreground",
-            isCollapsed && "rotate-180"
-          )}
-        />
+        <View className={cn(isCollapsed && "rotate-180")}>
+          <ChevronDown className="h-4 w-4 text-foreground" />
+        </View>
       </Pressable>
     </View>
   )

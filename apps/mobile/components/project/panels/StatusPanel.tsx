@@ -600,13 +600,9 @@ export function StatusPanel({ projectId, agentUrl, visible, isPaidPlan }: Status
                               <Text className="text-[10px] text-primary">
                                 Compacted x{session.compactionCount}
                               </Text>
-                              <ChevronDown
-                                size={10}
-                                className={cn(
-                                  'text-primary',
-                                  isExpanded && 'rotate-180',
-                                )}
-                              />
+                              <View className={cn(isExpanded && 'rotate-180')}>
+                                <ChevronDown size={10} className="text-primary" />
+                              </View>
                             </View>
                           )}
                           <Text className="text-[10px] text-muted-foreground">

@@ -18,6 +18,7 @@ import {
   useDomainActions,
   useProjectCollection,
 } from "@shogo/shared-app/domain";
+import { cn } from "@shogo/shared-ui/primitives";
 import { useAuth } from "../../contexts/auth";
 import { useDomainHttp } from "../../contexts/domain";
 import { useActiveWorkspace } from "../../hooks/useActiveWorkspace";
@@ -233,13 +234,9 @@ export function ProjectCreationSheet({
               <Text className="flex-1 text-sm font-medium text-foreground">
                 Advanced
               </Text>
-              <ChevronDown
-                size={17}
-                className="text-muted-foreground"
-                style={{
-                  transform: [{ rotate: advancedOpen ? "180deg" : "0deg" }],
-                }}
-              />
+              <View className={cn(advancedOpen && "rotate-180")}>
+                <ChevronDown size={17} className="text-muted-foreground" />
+              </View>
             </Pressable>
             {advancedOpen ? (
               <View className="mt-2 overflow-hidden rounded-xl border border-border">

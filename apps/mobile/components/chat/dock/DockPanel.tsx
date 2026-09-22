@@ -3,7 +3,7 @@
 
 /**
  * Shared chrome for every chat dock panel: header row (accent dot, icon,
- * title, summary, header actions, dismiss, chevron) plus a fade-in body.
+ * title, summary, header actions, dismiss, chevron) plus a body.
  *
  * Body content mounts/unmounts with `expanded` rather than animating a
  * measured height — matching the majority of the codebase's existing
@@ -11,6 +11,16 @@
  * `TodoWidget`), and critically, this is what lets a panel like the live
  * browser viewport actually suspend its subscription while collapsed:
  * unmounting is the suspend.
+ *
+ * The body mounts/unmounts as a PLAIN conditional (`{expanded && <View>}`),
+ * not wrapped in `@legendapp/motion`'s `AnimatePresence`+`Motion.View` fade
+ * it used to have. That exit-fade could get interrupted or fail to settle
+ * (rapid re-toggling, a panel re-registering mid-transition, etc.), and
+ * once stuck, no *further* click could ever finish closing the panel
+ * either — a real "click a chip once and it's open forever until you
+ * refresh" bug. A plain conditional mounts/unmounts in the very same
+ * render pass as `expanded` flips, so there's no exit animation left to
+ * get stuck in. See `DockPanel.rtl.test.tsx`.
  *
  * Blocking panels render without a chevron and are not collapsible — the
  * store already reports them as always-expanded and refuses to toggle
@@ -27,7 +37,7 @@
 
 import { useMemo, type ReactNode } from "react"
 import { View, Text, Pressable } from "react-native"
-import { Motion, AnimatePresence } from "@legendapp/motion"
+import { Motion } from "@legendapp/motion"
 import { ChevronDown, X } from "lucide-react-native"
 import { cn } from "@shogo/shared-ui/primitives"
 import type { DockPanelAccent, DockIconComponent } from "../../../lib/chat-dock-store"
@@ -36,10 +46,6 @@ const ANIM_DURATION = 220
 const ROTATE_TRANSITION = { type: "timing", duration: ANIM_DURATION, easing: "easeInOut" } as const
 const ROTATE_OPEN = { rotateZ: "180deg" }
 const ROTATE_CLOSED = { rotateZ: "0deg" }
-const FADE_TRANSITION = { type: "timing", duration: ANIM_DURATION, easing: "easeInOut" } as const
-const FADE_INITIAL = { opacity: 0 }
-const FADE_ANIMATE = { opacity: 1 }
-const FADE_EXIT = { opacity: 0 }
 
 const ACCENT_DOT_CLASS: Record<DockPanelAccent, string> = {
   default: "bg-muted-foreground/40",
@@ -110,19 +116,11 @@ export function DockPanel({
         )}
       </Pressable>
 
-      <AnimatePresence>
-        {expanded && (
-          <Motion.View
-            initial={FADE_INITIAL}
-            animate={FADE_ANIMATE}
-            exit={FADE_EXIT}
-            transition={FADE_TRANSITION}
-            className="border-t border-border/50 px-3 py-2"
-          >
-            {children}
-          </Motion.View>
-        )}
-      </AnimatePresence>
+      {expanded && (
+        <View className="border-t border-border/50 px-3 py-2">
+          {children}
+        </View>
+      )}
     </View>
   )
 }
