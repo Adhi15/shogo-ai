@@ -566,7 +566,7 @@ function ChatInputImpl({
   const sendChrome = composerSendChrome(isNative || useProminentComposer);
   const mobileChatText = usesMobileWorkspaceChrome || useProminentComposer;
   const showModelPicker =
-    composer.showModelPicker || usesMobileWorkspaceChrome;
+    composer.showModelPicker || (usesMobileWorkspaceChrome && !!projectId);
   const showInlineMobileModelPicker =
     showModelPicker && (useProminentComposer || usesMobileWorkspaceChrome);
   const composerFontSize = mobileChatText ? 16 : 14;
