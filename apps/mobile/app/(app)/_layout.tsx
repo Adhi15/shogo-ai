@@ -100,11 +100,9 @@ function AppLayoutInner() {
     pathname !== "/(app)/projects";
   // The mobile shell is coupled to the workspace runtime: without it, the
   // legacy home remains available instead of exposing a chat that cannot run
-  // turns. It is personal-workspace-only — see `experience` above.
-  const isPersonalWorkspace = experience.kind === "personal";
-  const mobileAgentShellEnabled =
-    isWorkspaceRuntimeEnabled() &&
-    isPersonalWorkspace;
+  // turns. All workspace kinds share this mobile chrome; wide web and IDE
+  // surfaces remain on the established classic presentation.
+  const mobileAgentShellEnabled = isWorkspaceRuntimeEnabled();
   const isHomePage =
     pathname === "/" || pathname === "/(app)" || pathname === "/(app)/index";
   const isWorkspaceChatRoute =
