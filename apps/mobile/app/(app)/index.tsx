@@ -902,13 +902,13 @@ export const HomeScreen = observer(function HomeScreen({
     )
   }
 
-  // The workspace agent chat surface (and its sidebar chrome in the app
-  // layout) is personal-workspace-only — team workspaces keep the classic
-  // builder home. The wide and narrow/native shells ship independently.
+  // The workspace agent chat surface is mobile-only and personal-workspace-
+  // only. Wide web surfaces always retain the classic builder home.
   const workspaceAgentChatEnabled =
     isWorkspaceRuntimeEnabled() &&
+    isNarrowAgentSurface &&
     currentExperience.kind === 'personal' &&
-    (localMode || (isNarrowAgentSurface ? features.mobileAgentShell : features.agentShell))
+    (localMode || features.mobileAgentShell)
   if (!forceBuilder && workspaceAgentChatEnabled) {
     return <WorkspaceAgentChatScreen key={currentWorkspace?.id ?? 'workspace-loading'} />
   }
@@ -920,6 +920,7 @@ export const HomeScreen = observer(function HomeScreen({
   if (
     !forceBuilder &&
     isWorkspaceRuntimeEnabled() &&
+    isNarrowAgentSurface &&
     features.personalShell &&
     currentExperience.homeScreen === 'companion'
   ) {

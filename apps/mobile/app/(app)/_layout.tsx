@@ -56,7 +56,6 @@ import { useNativeSheetDrawer } from "../../lib/use-native-drawer-swipe";
 import { useNativePhoneSheetOpen } from "../../lib/native-phone-sheet-lock";
 import { NativeSheetDrawerShell } from "../../components/layout/NativeSheetDrawerShell";
 import { MobileBottomNav } from "../../components/layout/MobileBottomNav";
-import { WorkspaceAgentShell } from "../../components/layout/WorkspaceAgentShell";
 import { MobileWorkspaceShell } from "../../components/layout/MobileWorkspaceShell";
 import { projectSidebarEvents } from "../../lib/project-sidebar-events";
 
@@ -66,12 +65,11 @@ function AppLayoutInner() {
   csMark("app:layout:render");
   const { isAuthenticated, isLoading, user, refreshSession } = useAuth();
   const { localMode, features } = usePlatformConfig();
-  // The workspace agent shell (new sidebar + WorkspaceAgentShell/
-  // MobileWorkspaceShell chrome) is personal-workspace-only — team
-  // workspaces always keep the classic AppSidebar + plain project view,
-  // on both web and local desktop. `useWorkspaceExperience()` defaults to
-  // `'team'` until the active workspace has loaded, which is the correct
-  // fail-safe here too (never flash the new shell before we know better).
+  // The workspace agent chrome is mobile-only. Wide web surfaces always keep
+  // the established AppSidebar + plain project view, regardless of workspace
+  // kind. `useWorkspaceExperience()` defaults to `'team'` until the active
+  // workspace has loaded, so narrow surfaces also avoid flashing the new
+  // mobile chrome before their workspace is known.
   const experience = useWorkspaceExperience();
   const router = useRouter();
   const pathname = usePathname();
@@ -100,20 +98,14 @@ function AppLayoutInner() {
     /^\/(app\/)?projects\/[^/]+/.test(pathname.replace(/^\/(app\/)?/, "/")) &&
     pathname !== "/projects" &&
     pathname !== "/(app)/projects";
-  // The shell is coupled to the workspace runtime: without it, the legacy
-  // home remains available instead of exposing a chat that cannot run turns.
-  // Desktop and narrow/native rollouts are deliberately independent. Gated
-  // to personal workspaces only — see `experience` above.
+  // The mobile shell is coupled to the workspace runtime: without it, the
+  // legacy home remains available instead of exposing a chat that cannot run
+  // turns. It is personal-workspace-only — see `experience` above.
   const isPersonalWorkspace = experience.kind === "personal";
-  const desktopAgentShellEnabled =
-    isWorkspaceRuntimeEnabled() &&
-    isPersonalWorkspace &&
-    (localMode || features.agentShell);
   const mobileAgentShellEnabled =
     isWorkspaceRuntimeEnabled() &&
     isPersonalWorkspace &&
     (localMode || features.mobileAgentShell);
-  const useAgentShell = isWide && !isIdeEmbed && desktopAgentShellEnabled;
   const isHomePage =
     pathname === "/" || pathname === "/(app)" || pathname === "/(app)/index";
   const isWorkspaceChatRoute =
@@ -359,7 +351,6 @@ function AppLayoutInner() {
 
   const showSidebar =
     isWide &&
-    !useAgentShell &&
     !isIdeEmbed &&
     !isSettingsPage &&
     !isBillingPage;
@@ -395,11 +386,7 @@ function AppLayoutInner() {
       drawer={drawer}
     >
       {localMode && !isIdeEmbed ? <RecordingIndicator /> : null}
-      {useAgentShell ? (
-        <WorkspaceAgentShell>
-          <Slot />
-        </WorkspaceAgentShell>
-      ) : useMobileWorkspaceShell ? (
+      {useMobileWorkspaceShell ? (
         <MobileWorkspaceShell>
           <Slot />
         </MobileWorkspaceShell>
