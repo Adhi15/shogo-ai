@@ -137,6 +137,7 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
   } | null>(null);
   const [nativeProjectActions, setNativeProjectActions] = useState<any>(null);
   const [renamingProject, setRenamingProject] = useState<any>(null);
+  const suppressNextProjectToggleRef = useRef<string | null>(null);
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -740,11 +741,28 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
                                 project.name || "Untitled project"
                               }`}
                               accessibilityState={{ expanded }}
-                              onPress={() => toggleProjectChats(project.id)}
+                              onPress={() => {
+                                if (
+                                  suppressNextProjectToggleRef.current ===
+                                  project.id
+                                ) {
+                                  suppressNextProjectToggleRef.current = null;
+                                  return;
+                                }
+                                toggleProjectChats(project.id);
+                              }}
                               onLongPress={
                                 Platform.OS === "web"
                                   ? undefined
-                                  : () => setNativeProjectActions(project)
+                                  : () => {
+                                      // React Native can fire onPress after
+                                      // onLongPress on release. Keep the
+                                      // project list stable beneath its
+                                      // native action sheet.
+                                      suppressNextProjectToggleRef.current =
+                                        project.id;
+                                      setNativeProjectActions(project);
+                                    }
                               }
                               {...(Platform.OS === "web"
                                 ? ({
@@ -925,7 +943,10 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
               ? pinnedProjectIds.has(nativeProjectActions.id)
               : false
           }
-          onClose={() => setNativeProjectActions(null)}
+          onClose={() => {
+            suppressNextProjectToggleRef.current = null;
+            setNativeProjectActions(null);
+          }}
           onRename={() => {
             setRenamingProject(nativeProjectActions);
             setNativeProjectActions(null);

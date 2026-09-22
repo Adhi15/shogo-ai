@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2026 Shogo Technologies, Inc.
 
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import {
   Platform,
   Pressable,
@@ -123,6 +123,27 @@ export function ChatTreeItem({
   // Web-only right-click menu anchor (viewport coords).
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [nativeActionsOpen, setNativeActionsOpen] = useState(false);
+  const suppressNextChatPressRef = useRef(false);
+
+  const openNativeActions = useCallback(() => {
+    // React Native can fire onPress after onLongPress on release. Suppress
+    // that follow-up press so the chat does not open behind its action sheet.
+    suppressNextChatPressRef.current = true;
+    setNativeActionsOpen(true);
+  }, []);
+
+  const closeNativeActions = useCallback(() => {
+    suppressNextChatPressRef.current = false;
+    setNativeActionsOpen(false);
+  }, []);
+
+  const handleChatPress = useCallback(() => {
+    if (suppressNextChatPressRef.current) {
+      suppressNextChatPressRef.current = false;
+      return;
+    }
+    onSelect(session.id);
+  }, [onSelect, session.id]);
 
   const startEdit = useCallback(() => {
     setEditValue(label);
@@ -236,9 +257,9 @@ export function ChatTreeItem({
   return (
     <>
       <Pressable
-        onPress={() => onSelect(session.id)}
+        onPress={handleChatPress}
         onLongPress={
-          Platform.OS === "web" ? undefined : () => setNativeActionsOpen(true)
+          Platform.OS === "web" ? undefined : openNativeActions
         }
         onLayout={handleLayout}
         role="link"
@@ -326,7 +347,7 @@ export function ChatTreeItem({
       )}
       <NativePhoneSheet
         visible={nativeActionsOpen}
-        onClose={() => setNativeActionsOpen(false)}
+        onClose={closeNativeActions}
         title="Chat actions"
         keepDrawerOpen
       >
@@ -335,7 +356,7 @@ export function ChatTreeItem({
             label="Rename"
             icon={<Pencil size={20} className="text-muted-foreground" />}
             onPress={() => {
-              setNativeActionsOpen(false);
+              closeNativeActions();
               startEdit();
             }}
           />
@@ -349,7 +370,7 @@ export function ChatTreeItem({
               )
             }
             onPress={() => {
-              setNativeActionsOpen(false);
+              closeNativeActions();
               onTogglePin(session.id, !session.isPinned);
             }}
           />
@@ -363,7 +384,7 @@ export function ChatTreeItem({
               )
             }
             onPress={() => {
-              setNativeActionsOpen(false);
+              closeNativeActions();
               onToggleArchive(session.id, !session.isArchived);
             }}
           />
@@ -373,7 +394,7 @@ export function ChatTreeItem({
             danger
             icon={<Trash2 size={20} className="text-destructive" />}
             onPress={() => {
-              setNativeActionsOpen(false);
+              closeNativeActions();
               onRequestDelete(session.id);
             }}
           />
