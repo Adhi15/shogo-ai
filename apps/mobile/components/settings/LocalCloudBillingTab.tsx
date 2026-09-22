@@ -39,7 +39,12 @@ function openUrl(url: string | undefined) {
   })
 }
 
-export function LocalCloudBillingTab() {
+export function LocalCloudBillingTab({
+  onOpenExternalUrl,
+}: {
+  /** Used by a parent Settings modal to dismiss itself before leaving the app. */
+  onOpenExternalUrl?: (url: string) => void
+}) {
   const workspace = useActiveWorkspace()
   const {
     summary,
@@ -124,6 +129,28 @@ export function LocalCloudBillingTab() {
       ? windowDisplays.weekly.countdown
       : windowDisplays.fiveHour.countdown,
   })
+  const workspaceId = summary.workspace?.id
+  const cloudUrl = summary.cloudUrl?.replace(/\/$/, '')
+  const upgradeUrl =
+    summary.upgradeUrl ??
+    (cloudUrl && workspaceId
+      ? `${cloudUrl}/billing?workspace=${encodeURIComponent(workspaceId)}`
+      : undefined)
+  const manageUrl =
+    summary.manageUrl ??
+    (cloudUrl && workspaceId
+      ? `${cloudUrl}/settings?tab=billing&workspace=${encodeURIComponent(
+          workspaceId,
+        )}`
+      : undefined)
+  const openBillingUrl = (url: string | undefined) => {
+    if (!url) return
+    if (onOpenExternalUrl) {
+      onOpenExternalUrl(url)
+      return
+    }
+    openUrl(url)
+  }
 
   return (
     <View className="gap-4">
@@ -219,10 +246,10 @@ export function LocalCloudBillingTab() {
 
           <Separator />
           <View className="flex-row items-center gap-2">
-            <Button className="flex-1" onPress={() => openUrl(summary.upgradeUrl)}>
+            <Button className="flex-1" onPress={() => openBillingUrl(upgradeUrl)}>
               <Text className="text-primary-foreground font-medium">Upgrade plan</Text>
             </Button>
-            <Button variant="outline" className="flex-1" onPress={() => openUrl(summary.manageUrl)}>
+            <Button variant="outline" className="flex-1" onPress={() => openBillingUrl(manageUrl)}>
               <External size={14} className="text-foreground" />
               <Text className="text-foreground font-medium">Manage on web</Text>
             </Button>

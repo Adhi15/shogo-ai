@@ -51,8 +51,11 @@ export default function AffiliateDashboardRedirect() {
  */
 export const AffiliateReferralPanel = observer(function AffiliateReferralPanel({
   embedded = false,
+  onNavigate,
 }: {
   embedded?: boolean
+  /** Lets an embedding Settings modal dismiss before following a page route. */
+  onNavigate?: (href: any) => void
 }) {
   const router = useRouter()
   const http = useDomainHttp()
@@ -65,6 +68,16 @@ export const AffiliateReferralPanel = observer(function AffiliateReferralPanel({
   const [summary, setSummary] = useState<AffiliateSummary | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const navigate = useCallback(
+    (href: any) => {
+      if (onNavigate) {
+        onNavigate(href)
+        return
+      }
+      router.push(href)
+    },
+    [onNavigate, router],
+  )
 
   const load = useCallback(async () => {
     setErrorMsg(null)
@@ -191,7 +204,7 @@ export const AffiliateReferralPanel = observer(function AffiliateReferralPanel({
             </CardContent>
           </Card>
         ) : enrolled === false ? (
-          <NotEnrolledCard onEnroll={() => router.push('/(app)/affiliate/enroll')} />
+          <NotEnrolledCard onEnroll={() => navigate('/(app)/affiliate/enroll')} />
         ) : summary ? (
           <>
             <View className="gap-1">
@@ -227,25 +240,25 @@ export const AffiliateReferralPanel = observer(function AffiliateReferralPanel({
                 icon={<Wallet size={18} className="text-foreground" />}
                 title="Commissions"
                 subtitle={`${summary.commissionsLast30d} in the last 30 days`}
-                onPress={() => router.push('/(app)/affiliate/commissions')}
+                onPress={() => navigate('/(app)/affiliate/commissions')}
               />
               <NavRow
                 icon={<Wallet size={18} className="text-foreground" />}
                 title="Payouts"
                 subtitle={`Lifetime ${dollars(summary.lifetimePayoutCents)}`}
-                onPress={() => router.push('/(app)/affiliate/payouts')}
+                onPress={() => navigate('/(app)/affiliate/payouts')}
               />
               <NavRow
                 icon={<Users size={18} className="text-foreground" />}
                 title="Downline"
                 subtitle="See who you've referred"
-                onPress={() => router.push('/(app)/affiliate/downline')}
+                onPress={() => navigate('/(app)/affiliate/downline')}
               />
               <NavRow
                 icon={<Video size={18} className="text-foreground" />}
                 title="Content earnings"
                 subtitle="Connect Instagram / TikTok and earn a CPM on your views"
-                onPress={() => router.push('/(app)/affiliate/content')}
+                onPress={() => navigate('/(app)/affiliate/content')}
               />
             </View>
 

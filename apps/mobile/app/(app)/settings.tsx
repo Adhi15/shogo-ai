@@ -99,6 +99,9 @@ import { UpdatesTab } from "../../components/settings/UpdatesTab";
 import { IntegrationsTab } from "../../components/settings/IntegrationsTab";
 import { WorkspaceModelsTab } from "../../components/settings/WorkspaceModelsTab";
 import { RemoteControlTab } from "../../components/settings/RemoteControlTab";
+import { ApiKeysPage } from "./api-keys";
+import { CreatorHub } from "./creator";
+import { NewWorkspacePage } from "./new-workspace";
 import {
   type AnalyticsPeriod,
   type UsageSummaryData,
@@ -330,6 +333,11 @@ function SettingsSidebar({
   onExit,
   showBilling = true,
   localMode = false,
+  onOpenApiKeys,
+  onOpenCreator,
+  onOpenNewWorkspace,
+  onOpenRoute,
+  onOpenExternalUrl,
 }: {
   activeTab: TabId;
   onTabChange: (tab: TabId) => void;
@@ -338,6 +346,11 @@ function SettingsSidebar({
   onExit: () => void;
   showBilling?: boolean;
   localMode?: boolean;
+  onOpenApiKeys?: () => void;
+  onOpenCreator?: () => void;
+  onOpenNewWorkspace?: () => void;
+  onOpenRoute?: (href: any) => void;
+  onOpenExternalUrl?: (url: string) => void;
 }) {
   const { ArrowLeft } = useSettingsIcons();
   const tabItem = (id: TabId): SidebarItem => ({
@@ -399,6 +412,8 @@ function SettingsSidebar({
         showActions={false}
         showSignOut={false}
         variant="sidebar"
+        onOpenNewWorkspace={onOpenNewWorkspace}
+        onOpenRoute={onOpenRoute}
       />
 
       {sections.map((section, sectionIdx) => (
@@ -450,6 +465,11 @@ function SettingsSidebar({
         onSelectTab={onTabChange}
         showWorkspace={false}
         variant="sidebar"
+        onOpenApiKeys={onOpenApiKeys}
+        onOpenCreator={onOpenCreator}
+        onOpenNewWorkspace={onOpenNewWorkspace}
+        onOpenRoute={onOpenRoute}
+        onOpenExternalUrl={onOpenExternalUrl}
       />
     </ScrollView>
   );
@@ -673,7 +693,12 @@ function RemoteAccessSection({ workspaceId }: { workspaceId?: string }) {
 // WORKSPACE SETTINGS TAB
 // ============================================================================
 
-const WorkspaceSettingsTab = observer(function WorkspaceSettingsTab() {
+const WorkspaceSettingsTab = observer(function WorkspaceSettingsTab({
+  onNavigate,
+}: {
+  /** Dismisses an enclosing Settings modal before following a page route. */
+  onNavigate?: (href: any) => void;
+}) {
   const { X } = useSettingsIcons();
   const { width } = useWindowDimensions();
   const isWideNameSection = width >= SETTINGS_WIDE_BREAKPOINT;
@@ -759,7 +784,8 @@ const WorkspaceSettingsTab = observer(function WorkspaceSettingsTab() {
     try {
       await actions.deleteWorkspace(currentWorkspace.id);
       setIsDeleteDialogOpen(false);
-      router.replace("/(app)");
+      if (onNavigate) onNavigate("/(app)");
+      else router.replace("/(app)");
     } catch (error) {
       console.error("Failed to delete workspace:", error);
     } finally {
@@ -1014,7 +1040,8 @@ const WorkspaceSettingsTab = observer(function WorkspaceSettingsTab() {
                     }
                     setIsLeaveDialogOpen(false);
                     setLeaveError(null);
-                    router.replace("/(app)/projects");
+                    if (onNavigate) onNavigate("/(app)/projects");
+                    else router.replace("/(app)/projects");
                   } catch (error: any) {
                     console.error(
                       "[Settings] Failed to leave workspace:",
@@ -1168,7 +1195,12 @@ function DualPlanCard() {
   );
 }
 
-function AccountTab() {
+function AccountTab({
+  onNavigate,
+}: {
+  /** Dismisses an enclosing Settings modal before following a page route. */
+  onNavigate?: (href: any) => void;
+}) {
   const { user, signOut, updateUser } = useAuth();
   const http = useDomainHttp();
   const router = useRouter();
@@ -1211,7 +1243,8 @@ function AccountTab() {
 
   const handleSignOut = async () => {
     await signOut();
-    router.replace(localMode ? "/" : "/(auth)/sign-in");
+    if (onNavigate) onNavigate(localMode ? "/" : "/(auth)/sign-in");
+    else router.replace(localMode ? "/" : "/(auth)/sign-in");
   };
 
   const handleDeleteAccount = async () => {
@@ -1220,7 +1253,8 @@ function AccountTab() {
     try {
       await api.deleteAccount(http, user.id);
       await signOut();
-      router.replace(localMode ? "/" : "/(auth)/sign-in");
+      if (onNavigate) onNavigate(localMode ? "/" : "/(auth)/sign-in");
+      else router.replace(localMode ? "/" : "/(auth)/sign-in");
     } catch (error: any) {
       console.error("Failed to delete account:", error);
       const msg =
@@ -3292,7 +3326,15 @@ const WorkspaceFamilySection = observer(function WorkspaceFamilySection({
   );
 });
 
-function BillingTab() {
+function BillingTab({
+  onOpenRoute,
+  onOpenWebPath,
+  onSelectTab,
+}: {
+  onOpenRoute?: (href: any) => void;
+  onOpenWebPath?: (path: string) => void;
+  onSelectTab?: (tab: TabId) => void;
+}) {
   const { CreditCard } = useSettingsIcons();
   const router = useRouter();
   const http = useDomainHttp();
@@ -3349,10 +3391,14 @@ function BillingTab() {
   }, [http, workspace?.id]);
 
   const handleManageUsageOnWeb = useCallback(() => {
+    if (onOpenWebPath) {
+      onOpenWebPath("/settings?tab=billing");
+      return;
+    }
     openWebAppSession("/settings?tab=billing").catch((err) =>
       console.warn("[BillingTab] failed to open web billing:", err)
     );
-  }, []);
+  }, [onOpenWebPath]);
 
   const planId = subscription?.planId?.toLowerCase() ?? "free";
   const planLabel = planId.startsWith("enterprise")
@@ -3500,7 +3546,11 @@ function BillingTab() {
           <View className="flex-row items-center gap-2">
             <Button
               variant="default"
-              onPress={() => router.push("/(app)/billing" as any)}
+              onPress={() =>
+                onOpenRoute
+                  ? onOpenRoute("/(app)/billing")
+                  : router.push("/(app)/billing" as any)
+              }
               className="flex-1"
             >
               <Text className="text-primary-foreground font-medium">
@@ -3510,7 +3560,9 @@ function BillingTab() {
             <Button
               variant="outline"
               onPress={() =>
-                router.push("/(app)/settings?tab=analytics" as any)
+                onSelectTab
+                  ? onSelectTab("analytics")
+                  : router.push("/(app)/settings?tab=analytics" as any)
               }
               className="flex-1"
             >
@@ -4012,6 +4064,11 @@ export function WorkspaceAccountActions({
   showSignOut = true,
   showActionsHeading = true,
   variant = "default",
+  onOpenApiKeys,
+  onOpenCreator,
+  onOpenNewWorkspace,
+  onOpenRoute,
+  onOpenExternalUrl,
 }: {
   onSelectTab?: (tab: TabId) => void;
   showWorkspace?: boolean;
@@ -4019,6 +4076,14 @@ export function WorkspaceAccountActions({
   showSignOut?: boolean;
   showActionsHeading?: boolean;
   variant?: "default" | "sidebar";
+  onOpenApiKeys?: () => void;
+  onOpenCreator?: () => void;
+  /** Lets Settings render workspace creation inside its active modal. */
+  onOpenNewWorkspace?: () => void;
+  /** Dismisses an enclosing Settings modal before routing elsewhere. */
+  onOpenRoute?: (href: any) => void;
+  /** Dismisses an enclosing Settings modal before opening an external URL. */
+  onOpenExternalUrl?: (url: string) => void;
 }) {
   const router = useRouter();
   const { signOut } = useAuth();
@@ -4041,8 +4106,16 @@ export function WorkspaceAccountActions({
   );
 
   const createWorkspace = useCallback(() => {
+    if (onOpenNewWorkspace) {
+      onOpenNewWorkspace();
+      return;
+    }
+    if (onOpenRoute) {
+      onOpenRoute("/(app)/new-workspace");
+      return;
+    }
     router.push("/(app)/new-workspace" as any);
-  }, [router]);
+  }, [onOpenNewWorkspace, onOpenRoute, router]);
 
   const go = useCallback((href: string) => router.push(href as any), [router]);
   const sidebar = variant === "sidebar";
@@ -4174,7 +4247,9 @@ export function WorkspaceAccountActions({
             <Pressable
               accessibilityRole="link"
               accessibilityLabel="Manage API keys"
-              onPress={() => go("/(app)/api-keys")}
+              onPress={() =>
+                onOpenApiKeys ? onOpenApiKeys() : go("/(app)/api-keys")
+              }
               className={cn(
                 sidebar
                   ? "flex-row items-center gap-2 rounded-lg px-2.5 py-2.5 active:bg-muted"
@@ -4187,7 +4262,11 @@ export function WorkspaceAccountActions({
             <Pressable
               accessibilityRole="link"
               accessibilityLabel="Open documentation"
-              onPress={() => void Linking.openURL(DOCS_URL)}
+              onPress={() =>
+                onOpenExternalUrl
+                  ? onOpenExternalUrl(DOCS_URL)
+                  : void Linking.openURL(DOCS_URL)
+              }
               className={cn(
                 sidebar
                   ? "flex-row items-center gap-2 rounded-lg px-2.5 py-2.5 active:bg-muted"
@@ -4200,7 +4279,11 @@ export function WorkspaceAccountActions({
             <Pressable
               accessibilityRole="link"
               accessibilityLabel="Open What's New"
-              onPress={() => void Linking.openURL(CHANGELOG_URL)}
+              onPress={() =>
+                onOpenExternalUrl
+                  ? onOpenExternalUrl(CHANGELOG_URL)
+                  : void Linking.openURL(CHANGELOG_URL)
+              }
               className={cn(
                 sidebar
                   ? "flex-row items-center gap-2 rounded-lg px-2.5 py-2.5 active:bg-muted"
@@ -4213,7 +4296,9 @@ export function WorkspaceAccountActions({
             <Pressable
               accessibilityRole="link"
               accessibilityLabel="Open Creator"
-              onPress={() => go("/(app)/creator")}
+              onPress={() =>
+                onOpenCreator ? onOpenCreator() : go("/(app)/creator")
+              }
               className={cn(
                 sidebar
                   ? "flex-row items-center gap-2 rounded-lg px-2.5 py-2.5 active:bg-muted"
@@ -4250,27 +4335,52 @@ export const SettingsContent = observer(function SettingsContent({
   activeTab,
   localMode = false,
   onSelectTab,
+  onOpenApiKeys,
+  onOpenRoute,
+  onOpenExternalUrl,
+  onOpenWebPath,
 }: {
   activeTab: TabId;
   localMode?: boolean;
   onSelectTab?: (tab: TabId) => void;
+  onOpenApiKeys?: () => void;
+  onOpenRoute?: (href: any) => void;
+  onOpenExternalUrl?: (url: string) => void;
+  onOpenWebPath?: (path: string) => void;
 }) {
   const isLocal = localMode;
   return (
     <>
-      {activeTab === "workspace" && <WorkspaceSettingsTab />}
+      {activeTab === "workspace" && (
+        <WorkspaceSettingsTab onNavigate={onOpenRoute} />
+      )}
       {activeTab === "people" && !isLocal && <PeopleTab />}
       {activeTab === "models" && !isLocal && <WorkspaceModelsTab />}
       {activeTab === "integrations" && <IntegrationsTab />}
-      {activeTab === "remote-control" && <RemoteControlTab />}
-      {activeTab === "account" && <AccountTab />}
+      {activeTab === "remote-control" && (
+        <RemoteControlTab onOpenApiKeys={onOpenApiKeys} />
+      )}
+      {activeTab === "account" && <AccountTab onNavigate={onOpenRoute} />}
       {activeTab === "appearance" && <AppearanceTab />}
       {activeTab === "security" && <SecuritySettingsPanel />}
       {activeTab === "compute" &&
         !isLocal &&
-        !HIDE_COMPUTE_PURCHASES_ON_IOS && <ComputeTab />}
+        !HIDE_COMPUTE_PURCHASES_ON_IOS && (
+          <ComputeTab
+            onOpenExternalUrl={onOpenExternalUrl}
+            onOpenWebPath={onOpenWebPath}
+          />
+        )}
       {activeTab === "billing" &&
-        (isLocal ? <LocalCloudBillingTab /> : <BillingTab />)}
+        (isLocal ? (
+          <LocalCloudBillingTab onOpenExternalUrl={onOpenExternalUrl} />
+        ) : (
+          <BillingTab
+            onOpenRoute={onOpenRoute}
+            onOpenWebPath={onOpenWebPath}
+            onSelectTab={onSelectTab}
+          />
+        ))}
       {activeTab === "analytics" && <WorkspaceAnalyticsTab />}
       {activeTab === "costs" && <WorkspaceCostTab />}
       {activeTab === "updates" && <UpdatesTab />}
@@ -4299,6 +4409,9 @@ export default observer(function SettingsPage({
     const requested = params.tab as TabId;
     return ALL_TAB_IDS.includes(requested) ? requested : "workspace";
   });
+  const [embeddedPage, setEmbeddedPage] = useState<
+    "api-keys" | "creator" | "new-workspace" | null
+  >(null);
 
   useEffect(() => {
     const requestedWorkspace = params.workspace;
@@ -4332,6 +4445,68 @@ export default observer(function SettingsPage({
     }
     leaveSettings(router, isNativePhone);
   };
+  const leaveModalThen = useCallback(
+    (action: () => void) => {
+      if (!onClose) {
+        action();
+        return;
+      }
+      onClose();
+      setTimeout(action, 0);
+    },
+    [onClose],
+  );
+  const openRoute = useCallback(
+    (href: any) => leaveModalThen(() => router.push(href as any)),
+    [leaveModalThen, router],
+  );
+  const openExternalUrl = useCallback(
+    (url: string) =>
+      leaveModalThen(() => {
+        void Linking.openURL(url).catch((error) => {
+          console.warn("[Settings] failed to open external URL:", error);
+        });
+      }),
+    [leaveModalThen],
+  );
+  const openWebPath = useCallback(
+    (path: string) =>
+      leaveModalThen(() => {
+        void openWebAppSession(path).catch((error) => {
+          console.warn("[Settings] failed to open web settings:", error);
+        });
+      }),
+    [leaveModalThen],
+  );
+  const openApiKeys = onClose
+    ? () => setEmbeddedPage("api-keys")
+    : undefined;
+  const openCreator = onClose ? () => setEmbeddedPage("creator") : undefined;
+  const openNewWorkspace = onClose
+    ? () => setEmbeddedPage("new-workspace")
+    : undefined;
+
+  if (embeddedPage === "api-keys") {
+    return <ApiKeysPage onBack={() => setEmbeddedPage(null)} />;
+  }
+
+  if (embeddedPage === "creator") {
+    return (
+      <CreatorHub
+        onBack={() => setEmbeddedPage(null)}
+        onNavigate={openRoute}
+      />
+    );
+  }
+
+  if (embeddedPage === "new-workspace") {
+    return (
+      <NewWorkspacePage
+        onBack={() => setEmbeddedPage(null)}
+        onCheckoutComplete={() => openRoute("/(app)")}
+      />
+    );
+  }
 
   if (isWide) {
     return (
@@ -4348,6 +4523,11 @@ export default observer(function SettingsPage({
             onExit={exitSettings}
             showBilling={features.billing}
             localMode={localMode}
+            onOpenApiKeys={openApiKeys}
+            onOpenCreator={openCreator}
+            onOpenNewWorkspace={openNewWorkspace}
+            onOpenRoute={openRoute}
+            onOpenExternalUrl={openExternalUrl}
           />
         </View>
         <ScrollView
@@ -4369,7 +4549,7 @@ export default observer(function SettingsPage({
                 </Text>
               </View>
               <Pressable
-                onPress={() => Linking.openURL(DOCS_URL)}
+                onPress={() => openExternalUrl(DOCS_URL)}
                 className="flex-row items-center gap-1.5 rounded-lg px-2 py-1.5 active:bg-muted"
               >
                 <ExternalLink size={14} className="text-muted-foreground" />
@@ -4380,6 +4560,10 @@ export default observer(function SettingsPage({
               activeTab={activeTab}
               localMode={localMode || !features.billing}
               onSelectTab={setActiveTab}
+              onOpenApiKeys={openApiKeys}
+              onOpenRoute={openRoute}
+              onOpenExternalUrl={openExternalUrl}
+              onOpenWebPath={openWebPath}
             />
           </View>
         </ScrollView>
@@ -4430,6 +4614,10 @@ export default observer(function SettingsPage({
             activeTab={activeTab}
             localMode={localMode || !features.billing}
             onSelectTab={setActiveTab}
+            onOpenApiKeys={openApiKeys}
+            onOpenRoute={openRoute}
+            onOpenExternalUrl={openExternalUrl}
+            onOpenWebPath={openWebPath}
           />
         </View>
       </ScrollView>

@@ -80,7 +80,11 @@ function PlatformIcon({ platform, size = 16 }: { platform?: string | null; size?
   return <Laptop size={size} className="text-muted-foreground" />
 }
 
-export default observer(function ApiKeysPage() {
+export const ApiKeysPage = observer(function ApiKeysPage({
+  onBack,
+}: {
+  onBack?: () => void
+}) {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
@@ -190,7 +194,13 @@ export default observer(function ApiKeysPage() {
         style={isNativePhone ? { paddingTop: Math.max(insets.top, 12) } : undefined}
       >
         <Pressable
-          onPress={() => router.canGoBack() ? router.back() : router.replace('/(app)/settings')}
+          onPress={() =>
+            onBack
+              ? onBack()
+              : router.canGoBack()
+                ? router.back()
+                : router.replace('/(app)/settings')
+          }
           hitSlop={8}
           className={cn(
             "items-center justify-center rounded-full border border-border bg-background",
@@ -697,3 +707,5 @@ export default observer(function ApiKeysPage() {
     </View>
   )
 })
+
+export default ApiKeysPage

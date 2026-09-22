@@ -176,8 +176,11 @@ export default function CreatorDashboardRedirect() {
  */
 export const CreatorPublishingPanel = observer(function CreatorPublishingPanel({
   embedded = false,
+  onNavigate,
 }: {
   embedded?: boolean
+  /** Lets an embedding Settings modal dismiss before following a page route. */
+  onNavigate?: (href: any) => void
 }) {
   const router = useRouter()
   const { user } = useAuth()
@@ -195,6 +198,16 @@ export const CreatorPublishingPanel = observer(function CreatorPublishingPanel({
   const [followingCreators, setFollowingCreators] = useState<FollowingCreator[]>([])
   const [followingTotal, setFollowingTotal] = useState(0)
   const [showFollowing, setShowFollowing] = useState(false)
+  const navigate = useCallback(
+    (href: any) => {
+      if (onNavigate) {
+        onNavigate(href)
+        return
+      }
+      router.push(href)
+    },
+    [onNavigate, router],
+  )
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -431,7 +444,7 @@ export const CreatorPublishingPanel = observer(function CreatorPublishingPanel({
         </View>
         {profile?.id && (
           <Pressable
-            onPress={() => router.push(`/(app)/marketplace/creators/${profile.id}` as any)}
+            onPress={() => navigate(`/(app)/marketplace/creators/${profile.id}`)}
             className="mt-1 flex-row items-center gap-1 px-3 py-2 rounded-full border border-border bg-card active:opacity-70"
           >
             <Text className="text-xs font-medium text-foreground">View public</Text>
@@ -530,7 +543,7 @@ export const CreatorPublishingPanel = observer(function CreatorPublishingPanel({
                     <FollowingCreatorCard
                       key={creator.id}
                       creator={creator}
-                      onPress={() => router.push(`/(app)/marketplace/creators/${creator.id}` as any)}
+                      onPress={() => navigate(`/(app)/marketplace/creators/${creator.id}`)}
                       onUnfollow={() => {
                         setFollowingCreators((prev) => prev.filter((c) => c.id !== creator.id))
                         setFollowingTotal((prev) => Math.max(0, prev - 1))
@@ -542,7 +555,7 @@ export const CreatorPublishingPanel = observer(function CreatorPublishingPanel({
                 <View className="items-center py-4">
                   <Text className="text-xs text-muted-foreground">Not following anyone yet</Text>
                   <Pressable
-                    onPress={() => router.push('/(app)/marketplace/creators' as any)}
+                    onPress={() => navigate('/(app)/marketplace/creators')}
                     className="mt-2 px-3 py-1.5 rounded-lg bg-primary/10 active:opacity-80"
                   >
                     <Text className="text-xs font-semibold text-primary">Browse Creators</Text>
@@ -580,7 +593,7 @@ export const CreatorPublishingPanel = observer(function CreatorPublishingPanel({
             }
             onPress={
               !stepPayout
-                ? () => router.push('/(app)/marketplace/creator/payout-setup' as any)
+                ? () => navigate('/(app)/marketplace/creator/payout-setup')
                 : undefined
             }
           />
@@ -590,7 +603,7 @@ export const CreatorPublishingPanel = observer(function CreatorPublishingPanel({
             onPress={
               !stepListing
                 ? () =>
-                    router.push({
+                    navigate({
                       pathname: '/(app)/marketplace/creator/listing/[id]',
                       params: { id: 'new' },
                     })
@@ -690,7 +703,7 @@ export const CreatorPublishingPanel = observer(function CreatorPublishingPanel({
         <Text className="text-base font-bold text-foreground">My listings</Text>
         <Pressable
           onPress={() =>
-            router.push({
+            navigate({
               pathname: '/(app)/marketplace/creator/listing/[id]',
               params: { id: 'new' },
             })
@@ -709,7 +722,7 @@ export const CreatorPublishingPanel = observer(function CreatorPublishingPanel({
               key={listing.id}
               listing={listing}
               onPress={() =>
-                router.push({
+                navigate({
                   pathname: '/(app)/marketplace/creator/listing/[id]',
                   params: { id: listing.id },
                 })
@@ -717,7 +730,7 @@ export const CreatorPublishingPanel = observer(function CreatorPublishingPanel({
               onViewPublic={
                 listing.status === 'published'
                   ? () =>
-                      router.push(`/(app)/marketplace/${listing.slug}` as any)
+                      navigate(`/(app)/marketplace/${listing.slug}`)
                   : undefined
               }
               transactions={transactions.filter((t) => t.listingId === listing.id)}

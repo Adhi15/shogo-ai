@@ -94,7 +94,12 @@ shogo login --api-key shogo_sk_XXXXXXXX
 shogo worker start --worker-dir ~/code/myrepo`
 
 
-export const RemoteControlTab = observer(function RemoteControlTab() {
+export const RemoteControlTab = observer(function RemoteControlTab({
+  onOpenApiKeys,
+}: {
+  /** Lets Settings render API keys inside its active modal. */
+  onOpenApiKeys?: () => void
+}) {
   const {
     Monitor,
     Laptop,
@@ -339,7 +344,11 @@ export const RemoteControlTab = observer(function RemoteControlTab() {
               </Text>
               <Button
                 variant="outline"
-                onPress={() => router.push('/(app)/api-keys')}
+                onPress={() =>
+                  onOpenApiKeys
+                    ? onOpenApiKeys()
+                    : router.push('/(app)/api-keys')
+                }
               >
                 <View className="flex-row items-center gap-2">
                   <Plus size={16} className="text-foreground" />
@@ -450,7 +459,14 @@ export const RemoteControlTab = observer(function RemoteControlTab() {
                   <Text className="text-sm text-foreground">Copy snippet</Text>
                 </View>
               </Button>
-              <Button size="sm" onPress={() => { setAddOpen(false); router.push('/(app)/api-keys') }}>
+              <Button
+                size="sm"
+                onPress={() => {
+                  setAddOpen(false)
+                  if (onOpenApiKeys) onOpenApiKeys()
+                  else router.push('/(app)/api-keys')
+                }}
+              >
                 <Text className="text-sm font-semibold text-white px-1">Create API key</Text>
               </Button>
             </View>

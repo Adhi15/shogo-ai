@@ -41,7 +41,15 @@ import {
 
 type MetricsPeriod = '1h' | '6h' | '24h' | '7d' | '30d'
 
-export function ComputeTab() {
+export function ComputeTab({
+  onOpenExternalUrl,
+  onOpenWebPath,
+}: {
+  /** Lets Settings dismiss an enclosing modal before checkout redirects. */
+  onOpenExternalUrl?: (url: string) => void
+  /** Lets Settings dismiss an enclosing modal before opening its web mirror. */
+  onOpenWebPath?: (path: string) => void
+}) {
   const http = useDomainHttp()
   const workspace = useActiveWorkspace()
   const workspaceId = workspace?.id
@@ -57,10 +65,14 @@ export function ComputeTab() {
   const tableSectionRef = useRef<View>(null)
 
   const handleManageComputeOnWeb = useCallback(() => {
+    if (onOpenWebPath) {
+      onOpenWebPath('/settings?tab=compute')
+      return
+    }
     openWebAppSession('/settings?tab=compute').catch((err) =>
       console.warn('[Compute] failed to open web compute settings:', err),
     )
-  }, [])
+  }, [onOpenWebPath])
 
   useEffect(() => {
     if (!workspaceId) return
@@ -104,7 +116,8 @@ export function ComputeTab() {
 
       if (data.url) {
         if (!isNative) {
-          window.location.href = data.url
+          if (onOpenExternalUrl) onOpenExternalUrl(data.url)
+          else window.location.href = data.url
         } else {
           const scheme = ExpoLinking.createURL('')
           await WebBrowser.openAuthSessionAsync(data.url, scheme)
@@ -115,7 +128,7 @@ export function ComputeTab() {
     } finally {
       setIsCheckoutLoading(false)
     }
-  }, [http, workspaceId, billingInterval])
+  }, [http, workspaceId, billingInterval, onOpenExternalUrl])
 
   if (!workspaceId) {
     return (

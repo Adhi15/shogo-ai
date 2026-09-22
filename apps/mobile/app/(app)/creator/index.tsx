@@ -23,7 +23,7 @@
 import { useMemo, useState } from 'react'
 import { View, Text, Pressable } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { Cloud, Sparkles } from 'lucide-react-native'
+import { ArrowLeft, Cloud, Sparkles } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { cn } from '@shogo/shared-ui/primitives'
 import { usePlatformConfig } from '../../../lib/platform-config'
@@ -37,7 +37,14 @@ function normalizeTab(raw: string | undefined): HubTab | null {
   return null
 }
 
-export default function CreatorHub() {
+export function CreatorHub({
+  onBack,
+  onNavigate,
+}: {
+  onBack?: () => void
+  /** Lets an embedding Settings modal dismiss before following a page route. */
+  onNavigate?: (href: any) => void
+}) {
   const router = useRouter()
   const params = useLocalSearchParams<{ tab?: string }>()
   const { localMode, shogoKeyConnected, features } = usePlatformConfig()
@@ -78,6 +85,17 @@ export default function CreatorHub() {
         className="px-5 pb-3 border-b border-border bg-background"
         style={{ paddingTop: Math.max(insets.top, 12) }}
       >
+        {onBack ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to settings"
+            onPress={onBack}
+            className="mb-4 flex-row items-center gap-1.5 self-start rounded-lg px-2 py-1.5 active:bg-muted"
+          >
+            <ArrowLeft size={16} className="text-muted-foreground" />
+            <Text className="text-sm text-muted-foreground">Settings</Text>
+          </Pressable>
+        ) : null}
         <View className="flex-row items-center gap-2 mb-2">
           <View className="h-7 w-7 rounded-full bg-primary/10 items-center justify-center">
             <Sparkles size={14} className="text-primary" />
@@ -102,14 +120,16 @@ export default function CreatorHub() {
 
       <View className="flex-1">
         {effectiveTab === 'publish' && canPublish ? (
-          <CreatorPublishingPanel embedded />
+          <CreatorPublishingPanel embedded onNavigate={onNavigate} />
         ) : (
-          <AffiliateReferralPanel embedded />
+          <AffiliateReferralPanel embedded onNavigate={onNavigate} />
         )}
       </View>
     </View>
   )
 }
+
+export default CreatorHub
 
 function TabButton({
   label,

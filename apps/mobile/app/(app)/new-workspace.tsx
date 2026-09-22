@@ -51,7 +51,15 @@ import {
   cn,
 } from '@shogo/shared-ui/primitives'
 
-export default function NewWorkspacePage() {
+export function NewWorkspacePage({
+  onBack,
+  onCheckoutComplete,
+}: {
+  /** Lets an embedding Settings modal return to its previous view. */
+  onBack?: () => void
+  /** Lets an embedding Settings modal dismiss before returning home. */
+  onCheckoutComplete?: () => void
+}) {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
@@ -141,7 +149,8 @@ export default function NewWorkspacePage() {
               }
 
               console.log('[NewWorkspace] checkout complete, navigating home')
-              router.replace('/(app)')
+              if (onCheckoutComplete) onCheckoutComplete()
+              else router.replace('/(app)')
             } catch (parseErr) {
               console.warn('[NewWorkspace] error parsing redirect URL:', parseErr)
             }
@@ -156,7 +165,15 @@ export default function NewWorkspacePage() {
     } finally {
       setIsCheckoutLoading(false)
     }
-  }, [http, workspaceName, billingInterval, user?.id, user?.email, router])
+  }, [
+    billingInterval,
+    http,
+    onCheckoutComplete,
+    router,
+    user?.email,
+    user?.id,
+    workspaceName,
+  ])
 
   if (Platform.OS === 'ios') {
     return (
@@ -167,7 +184,7 @@ export default function NewWorkspacePage() {
         <View className="mx-auto w-full max-w-xl">
           <View className="mb-8 flex-row items-center gap-3">
             <Pressable
-              onPress={() => router.back()}
+              onPress={() => (onBack ? onBack() : router.back())}
               className="h-11 w-11 items-center justify-center rounded-full border border-border bg-background"
               accessibilityRole="button"
               accessibilityLabel="Go back"
@@ -219,7 +236,7 @@ export default function NewWorkspacePage() {
           {/* Header */}
           <View className="mb-8 flex-row items-start gap-3">
             <Pressable
-              onPress={() => router.back()}
+              onPress={() => (onBack ? onBack() : router.back())}
               className="mt-1 h-11 w-11 items-center justify-center rounded-full border border-border bg-background"
               accessibilityRole="button"
               accessibilityLabel="Go back"
@@ -505,3 +522,5 @@ export default function NewWorkspacePage() {
     </KeyboardAvoidingView>
   )
 }
+
+export default NewWorkspacePage

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2026 Shogo Technologies, Inc.
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -16,10 +17,14 @@ import {
   ChevronRight,
   Folder,
 } from "lucide-react-native";
+import { useRouter } from "expo-router";
 import {
   SettingsContent,
   WorkspaceAccountActions,
 } from "../../app/(app)/settings";
+import { ApiKeysPage } from "../../app/(app)/api-keys";
+import { CreatorHub } from "../../app/(app)/creator";
+import { NewWorkspacePage } from "../../app/(app)/new-workspace";
 import { Text } from "../settings/account-sheet-chrome";
 import { ProjectSettingsContent } from "../settings/ProjectSettingsContent";
 import { usePlatformConfig } from "../../lib/platform-config";
@@ -29,6 +34,7 @@ import {
   visibleSettingsTabs,
 } from "../../lib/settings-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { openWebAppSession } from "../../lib/openWebAppSession";
 
 export function MobileSettingsSheet({
   visible,
@@ -41,12 +47,45 @@ export function MobileSettingsSheet({
   projectId?: string;
   openProjectSettings?: boolean;
 }) {
+  const router = useRouter();
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { features, localMode } = usePlatformConfig();
   const [activeTab, setActiveTab] = useState<SettingsTabId | null>(null);
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
   const [workspaceActionsOpen, setWorkspaceActionsOpen] = useState(false);
+  const [embeddedPage, setEmbeddedPage] = useState<
+    "api-keys" | "creator" | "new-workspace" | null
+  >(null);
+  const leaveSheetThen = useCallback(
+    (action: () => void) => {
+      onClose();
+      setTimeout(action, 0);
+    },
+    [onClose],
+  );
+  const openRoute = useCallback(
+    (href: any) => leaveSheetThen(() => router.push(href as any)),
+    [leaveSheetThen, router],
+  );
+  const openExternalUrl = useCallback(
+    (url: string) =>
+      leaveSheetThen(() => {
+        void Linking.openURL(url).catch((error) => {
+          console.warn("[MobileSettingsSheet] failed to open external URL:", error);
+        });
+      }),
+    [leaveSheetThen],
+  );
+  const openWebPath = useCallback(
+    (path: string) =>
+      leaveSheetThen(() => {
+        void openWebAppSession(path).catch((error) => {
+          console.warn("[MobileSettingsSheet] failed to open web settings:", error);
+        });
+      }),
+    [leaveSheetThen],
+  );
   const isLocal = localMode || !features.billing;
   const tabs = useMemo(
     () =>
@@ -63,6 +102,7 @@ export function MobileSettingsSheet({
       setActiveTab(null);
       setProjectSettingsOpen(false);
       setWorkspaceActionsOpen(false);
+      setEmbeddedPage(null);
       return;
     }
     setProjectSettingsOpen(openProjectSettings && !!projectId);
@@ -70,6 +110,12 @@ export function MobileSettingsSheet({
 
   const title = projectSettingsOpen
     ? "Project settings"
+    : embeddedPage === "api-keys"
+    ? "Devices & API Keys"
+    : embeddedPage === "creator"
+    ? "Creator studio"
+    : embeddedPage === "new-workspace"
+    ? "New workspace"
     : workspaceActionsOpen
     ? "Workspace actions"
     : activeTab
@@ -101,11 +147,18 @@ export function MobileSettingsSheet({
             <View className="h-1 w-9 rounded-full bg-muted-foreground/30" />
           </View>
           <View className="flex-row items-center px-6 pb-4 pt-2">
-            {activeTab || projectSettingsOpen || workspaceActionsOpen ? (
+            {activeTab ||
+            projectSettingsOpen ||
+            workspaceActionsOpen ||
+            embeddedPage ? (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Back to settings"
                 onPress={() => {
+                  if (embeddedPage) {
+                    setEmbeddedPage(null);
+                    return;
+                  }
                   setActiveTab(null);
                   setProjectSettingsOpen(false);
                   setWorkspaceActionsOpen(false);
@@ -120,7 +173,23 @@ export function MobileSettingsSheet({
             </Text>
           </View>
 
-          {activeTab || projectSettingsOpen || workspaceActionsOpen ? (
+          {embeddedPage ? (
+            <View className="flex-1">
+              {embeddedPage === "api-keys" ? (
+                <ApiKeysPage onBack={() => setEmbeddedPage(null)} />
+              ) : embeddedPage === "new-workspace" ? (
+                <NewWorkspacePage
+                  onBack={() => setEmbeddedPage(null)}
+                  onCheckoutComplete={() => openRoute("/(app)")}
+                />
+              ) : (
+                <CreatorHub
+                  onBack={() => setEmbeddedPage(null)}
+                  onNavigate={openRoute}
+                />
+              )}
+            </View>
+          ) : activeTab || projectSettingsOpen || workspaceActionsOpen ? (
             <ScrollView
               className="flex-1"
               contentContainerClassName="px-5 pt-5"
@@ -137,12 +206,21 @@ export function MobileSettingsSheet({
                   showWorkspace={false}
                   showSignOut={false}
                   showActionsHeading={false}
+                  onOpenApiKeys={() => setEmbeddedPage("api-keys")}
+                  onOpenCreator={() => setEmbeddedPage("creator")}
+                  onOpenNewWorkspace={() => setEmbeddedPage("new-workspace")}
+                  onOpenRoute={openRoute}
+                  onOpenExternalUrl={openExternalUrl}
                 />
               ) : activeTab ? (
                 <SettingsContent
                   activeTab={activeTab}
                   localMode={isLocal}
                   onSelectTab={setActiveTab}
+                  onOpenApiKeys={() => setEmbeddedPage("api-keys")}
+                  onOpenRoute={openRoute}
+                  onOpenExternalUrl={openExternalUrl}
+                  onOpenWebPath={openWebPath}
                 />
               ) : null}
             </ScrollView>
@@ -156,6 +234,8 @@ export function MobileSettingsSheet({
                 onSelectTab={setActiveTab}
                 showActions={false}
                 showSignOut={false}
+                onOpenNewWorkspace={() => setEmbeddedPage("new-workspace")}
+                onOpenRoute={openRoute}
               />
               {projectId ? (
                 <Pressable
