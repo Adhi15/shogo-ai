@@ -47,3 +47,26 @@ function createMobileAuthClient() {
 }
 
 export const authClient = createMobileAuthClient()
+
+/**
+ * Native auto-sign-in must use Better Auth's client fetcher so expoClient can
+ * persist the returned session cookies in SecureStore. React Native's global
+ * fetch does not maintain a browser-style cookie jar.
+ */
+export async function autoSignInLocally(): Promise<void> {
+  if (Platform.OS === 'web') {
+    const response = await fetch(`${API_URL}/api/local/auto-sign-in`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+    if (!response.ok) throw new Error(`Auto-sign-in returned ${response.status}`)
+    return
+  }
+
+  const result = await (authClient as any).$fetch(`${API_URL}/api/local/auto-sign-in`, {
+    method: 'POST',
+  })
+  if (result?.error) {
+    throw new Error(result.error.message || 'Local auto-sign-in failed')
+  }
+}
