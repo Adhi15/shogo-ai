@@ -82,7 +82,6 @@ const SINGLETON_PACKAGES = [
   'react-dom',
   'react-native',
   'react-native-web',
-  'react-native-svg',
   'react/jsx-runtime',
   'react/jsx-dev-runtime',
   'mobx',
@@ -231,15 +230,6 @@ function resolveSdkSourceJsAsTs(context, moduleName, platform) {
 
 const originalResolveRequest = config.resolver.resolveRequest
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  // Expo Router's public entry imports this internal compatibility entry by
-  // its extensionless package subpath. Strict package-exports resolution
-  // rejects that subpath even though the file ships with Expo Router.
-  if (moduleName === 'expo-router/entry-classic') {
-    return {
-      type: 'sourceFile',
-      filePath: require.resolve('expo-router/entry-classic.js', { paths: [__dirname] }),
-    }
-  }
   if (singletonPackageFor(moduleName)) {
     return context.resolveRequest(
       { ...context, originModulePath: path.join(__dirname, '_virtual.js') },

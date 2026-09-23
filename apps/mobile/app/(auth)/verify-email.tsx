@@ -6,7 +6,7 @@ import { ActivityIndicator, Text, View } from 'react-native'
 import { Mail } from 'lucide-react-native'
 import { useAuth } from '../../contexts/auth'
 import { Button } from '@shogo/shared-ui/primitives'
-import { AuthSurface } from '../../components/auth/AuthSurface'
+import { AuthSurface } from './AuthSurface'
 
 const RESEND_COOLDOWN_SECONDS = 60
 

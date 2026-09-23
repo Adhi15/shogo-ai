@@ -61,7 +61,7 @@ import {
   type ListingStatus,
   type AuditStatus,
   type AuditFinding,
-} from '../../../../components/admin/marketplaceHelpers'
+} from '../_helpers'
 
 interface ListingVersion {
   id: string

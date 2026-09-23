@@ -1,14 +1,23 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2026 Shogo Technologies, Inc.
 /**
- * Shared helpers for the admin marketplace pages: fetch wrappers, formatting,
- * and canonical listing-status pill colors.
+ * Shared helpers for the (admin)/marketplace/* pages: fetch wrappers,
+ * money + relative-time formatting, and the canonical listing-status
+ * pill colors so all four pages stay visually consistent.
+ *
+ * Mirrors the lightweight pattern used by (admin)/grants/*: small
+ * fetch helpers colocated with the screens rather than a typed client
+ * in lib/api.ts. We can promote these later if more admin pages start
+ * sharing this surface.
  */
 
 import { Alert, Platform } from 'react-native'
 
-import { API_URL } from '../../lib/api'
+import { API_URL } from '../../../lib/api'
 
+// React Native's Alert.alert is a no-op on react-native-web, so error
+// toasts in the admin pages silently vanished on the web dashboard. Route
+// through window.alert on web so admins actually see failures.
 export function showAdminAlert(title: string, message?: string): void {
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && typeof window.alert === 'function') {
@@ -112,14 +121,45 @@ export const ALL_LISTING_STATUSES: readonly ListingStatus[] = [
   'rejected',
 ] as const
 
+// Mirrors the creator-side palette in
+// apps/mobile/app/(app)/marketplace/creator/listing/[id].tsx so admins
+// see the same color vocabulary creators do.
 export const STATUS_PILL: Record<ListingStatus, { bg: string; dot: string; label: string }> = {
-  draft: { bg: 'bg-yellow-100 dark:bg-yellow-900/30', dot: 'bg-yellow-500', label: 'Draft' },
-  in_review: { bg: 'bg-yellow-100 dark:bg-yellow-900/30', dot: 'bg-yellow-500', label: 'In review' },
-  pending_review: { bg: 'bg-blue-100 dark:bg-blue-900/30', dot: 'bg-blue-500', label: 'Pending review' },
-  published: { bg: 'bg-green-100 dark:bg-green-900/30', dot: 'bg-green-500', label: 'Published' },
-  suspended: { bg: 'bg-muted', dot: 'bg-muted-foreground', label: 'Suspended' },
-  archived: { bg: 'bg-red-100 dark:bg-red-900/30', dot: 'bg-red-500', label: 'Archived' },
-  rejected: { bg: 'bg-red-100 dark:bg-red-900/30', dot: 'bg-red-500', label: 'Rejected' },
+  draft: {
+    bg: 'bg-yellow-100 dark:bg-yellow-900/30',
+    dot: 'bg-yellow-500',
+    label: 'Draft',
+  },
+  in_review: {
+    bg: 'bg-yellow-100 dark:bg-yellow-900/30',
+    dot: 'bg-yellow-500',
+    label: 'In review',
+  },
+  pending_review: {
+    bg: 'bg-blue-100 dark:bg-blue-900/30',
+    dot: 'bg-blue-500',
+    label: 'Pending review',
+  },
+  published: {
+    bg: 'bg-green-100 dark:bg-green-900/30',
+    dot: 'bg-green-500',
+    label: 'Published',
+  },
+  suspended: {
+    bg: 'bg-muted',
+    dot: 'bg-muted-foreground',
+    label: 'Suspended',
+  },
+  archived: {
+    bg: 'bg-red-100 dark:bg-red-900/30',
+    dot: 'bg-red-500',
+    label: 'Archived',
+  },
+  rejected: {
+    bg: 'bg-red-100 dark:bg-red-900/30',
+    dot: 'bg-red-500',
+    label: 'Rejected',
+  },
 }
 
 export type AuditSeverity = 'secret' | 'non_generic' | 'info'
@@ -162,7 +202,12 @@ export function countFindings(findings: AuditFinding[] | null | undefined): Find
   return counts
 }
 
-export const ADMIN_STATUS_PATCHES: readonly Exclude<
-  ListingStatus,
-  'draft' | 'in_review' | 'pending_review'
->[] = ['published', 'suspended', 'archived', 'rejected'] as const
+// Phase 7 admin actions allow these direct status patches via
+// PATCH /listings/:id/status. Other transitions use the dedicated
+// approve / reject endpoints.
+export const ADMIN_STATUS_PATCHES: readonly Exclude<ListingStatus, 'draft' | 'in_review' | 'pending_review'>[] = [
+  'published',
+  'suspended',
+  'archived',
+  'rejected',
+] as const

@@ -49,7 +49,7 @@ import {
   AUDIT_PILL,
   type AuditFinding,
   type AuditStatus,
-} from '../../../components/admin/marketplaceHelpers'
+} from './_helpers'
 
 interface ReviewQueueItem {
   id: string
