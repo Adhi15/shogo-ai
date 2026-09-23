@@ -38,6 +38,9 @@ import { onUpstreamRejection } from '../lib/federated-upstream'
  * degraded-connection banner without wiping credentials. Only an explicit
  * user-initiated sign-out deletes the stored key. */
 let cloudKeyRejected = false
+let lastHeartbeatOk: boolean | null = null
+let lastHeartbeatAt: number | null = null
+let lastHeartbeatError: string | null = null
 
 /**
  * Set the cloudKeyRejected flag from outside this module. Used by the
@@ -75,6 +78,17 @@ async function readStoredKeyInfo(localDb: any): Promise<{ workspace?: { id?: str
   }
 }
 
+function errorToMessage(error: unknown, fallback: string): string {
+  if (typeof error === 'string' && error.trim()) return error
+  if (error && typeof error === 'object') {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message
+    const code = (error as { code?: unknown }).code
+    if (typeof code === 'string' && code.trim()) return code
+  }
+  return fallback
+}
+
 /**
  * Register local-mode cloud session routes. Only call when SHOGO_LOCAL_MODE=true.
  */
@@ -92,6 +106,9 @@ export function localAuthRoutes() {
     ])
     delete process.env.SHOGO_API_KEY
     cloudKeyRejected = false
+    lastHeartbeatOk = null
+    lastHeartbeatAt = null
+    lastHeartbeatError = null
 
     import('../lib/instance-tunnel').then(({ stopInstanceTunnel }) => {
       stopInstanceTunnel()
@@ -104,6 +121,9 @@ export function localAuthRoutes() {
   router.post('/local/cloud-login/heartbeat', async (c) => {
     const storedKey = await readStoredKey(localDb)
     if (!storedKey) {
+      lastHeartbeatOk = false
+      lastHeartbeatAt = Date.now()
+      lastHeartbeatError = 'Not signed in'
       return c.json({ ok: false, error: 'Not signed in' }, 401)
     }
     const cloudUrl = getShogoCloudUrl()
@@ -122,22 +142,33 @@ export function localAuthRoutes() {
       })
       const data = await res.json().catch(() => ({} as any))
       if (!res.ok || data?.ok === false) {
+        const errorMessage = errorToMessage(data?.error, `HTTP ${res.status}`)
         // 401 ⇒ key revoked or superseded; surface so the UI can prompt
         // the user to re-sign-in. We never wipe credentials automatically.
         if (res.status === 401) {
           cloudKeyRejected = true
           console.warn('[CloudLogin] Cloud rejected API key (401) — key may be revoked or expired. User must re-sign-in.')
         }
+        lastHeartbeatOk = false
+        lastHeartbeatAt = Date.now()
+        lastHeartbeatError = errorMessage
         return c.json({
           ok: false,
-          error: data?.error || `HTTP ${res.status}`,
+          error: errorMessage,
           cloudKeyRejected: res.status === 401,
         }, res.status as any)
       }
       cloudKeyRejected = false
+      lastHeartbeatOk = true
+      lastHeartbeatAt = Date.now()
+      lastHeartbeatError = null
       return c.json({ ok: true })
     } catch (err: any) {
-      return c.json({ ok: false, error: err?.message || 'Heartbeat failed' }, 502)
+      const errorMessage = err?.message || 'Heartbeat failed'
+      lastHeartbeatOk = false
+      lastHeartbeatAt = Date.now()
+      lastHeartbeatError = errorMessage
+      return c.json({ ok: false, error: errorMessage }, 502)
     }
   })
 
@@ -145,7 +176,13 @@ export function localAuthRoutes() {
   router.get('/local/cloud-login/status', async (c) => {
     const storedKey = await readStoredKey(localDb)
     if (!storedKey) {
-      return c.json({ signedIn: false, cloudUrl: getShogoCloudUrl() })
+      return c.json({
+        signedIn: false,
+        cloudUrl: getShogoCloudUrl(),
+        lastHeartbeatOk,
+        lastHeartbeatAt,
+        lastHeartbeatError,
+      })
     }
     const info = await readStoredKeyInfo(localDb)
     return c.json({
@@ -156,6 +193,9 @@ export function localAuthRoutes() {
       deviceId: info?.deviceId || null,
       keyPrefix: storedKey.slice(0, 16),
       cloudKeyRejected,
+      lastHeartbeatOk,
+      lastHeartbeatAt,
+      lastHeartbeatError,
     })
   })
 

@@ -49,6 +49,17 @@ function hasDesktopBridge(): boolean {
 
 const SHOGO_CLOUD_URL_DEFAULT = 'https://studio.shogo.ai'
 
+function errorToMessage(error: unknown, fallback = ''): string {
+  if (typeof error === 'string' && error.trim()) return error
+  if (error && typeof error === 'object') {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message
+    const code = (error as { code?: unknown }).code
+    if (typeof code === 'string' && code.trim()) return code
+  }
+  return fallback
+}
+
 export default function AdminGeneralPage() {
   const { localMode } = usePlatformConfig()
   const [shogoKeyConnected, setShogoKeyConnected] = useState(false)
@@ -59,6 +70,8 @@ export default function AdminGeneralPage() {
   const [loginError, setLoginError] = useState('')
   const [isDisconnecting, setIsDisconnecting] = useState(false)
   const [cloudKeyRejected, setCloudKeyRejected] = useState(false)
+  const [lastHeartbeatOk, setLastHeartbeatOk] = useState<boolean | null>(null)
+  const [lastHeartbeatError, setLastHeartbeatError] = useState<string | null>(null)
   // Browser-preview fallback: when no Electron bridge is present we can't
   // drive the device-flow, so the user pastes a `shogo_sk_` API key minted
   // from the cloud dashboard. We POST it to PUT /api/local/shogo-key, which
@@ -97,6 +110,8 @@ export default function AdminGeneralPage() {
       setShogoWorkspaceName(status.workspace?.name || '')
       setShogoKeyMask(status.keyPrefix ? `${status.keyPrefix}…` : '')
       setCloudKeyRejected(!!status.cloudKeyRejected)
+      setLastHeartbeatOk(status.lastHeartbeatOk ?? null)
+      setLastHeartbeatError(errorToMessage((status as any).lastHeartbeatError) || null)
       if (status.cloudUrl) {
         setCloudUrl(status.cloudUrl)
       }
@@ -141,7 +156,7 @@ export default function AdminGeneralPage() {
         void loadStatus()
       } else {
         setLoginStatus('error')
-        setLoginError(result.error || 'Sign-in was cancelled')
+        setLoginError(errorToMessage(result.error, 'Sign-in was cancelled'))
       }
     })
 
@@ -149,9 +164,16 @@ export default function AdminGeneralPage() {
     // desktop heartbeat. This surfaces key-rejected warnings without
     // signing the user out.
     const desktopExt = desktop as any
-    desktopExt?.onCloudConnectionStatus?.((status: { connected: boolean; cloudKeyRejected: boolean; error?: string }) => {
+    desktopExt?.onCloudConnectionStatus?.((status: {
+      connected: boolean
+      cloudKeyRejected: boolean
+      error?: unknown
+      lastHeartbeatOk?: boolean | null
+    }) => {
       if (cancelled) return
       setCloudKeyRejected(status.cloudKeyRejected)
+      setLastHeartbeatOk(status.lastHeartbeatOk ?? (status.connected ? true : false))
+      setLastHeartbeatError(errorToMessage(status.error) || null)
     })
 
     return () => {
@@ -172,7 +194,7 @@ export default function AdminGeneralPage() {
         const result = await (window as any).shogoDesktop.startCloudLogin()
         if (!result?.ok) {
           setLoginStatus('error')
-          setLoginError(result?.error || 'Could not start sign-in')
+          setLoginError(errorToMessage(result?.error, 'Could not start the API-key connection'))
         }
         return
       }
@@ -223,12 +245,12 @@ export default function AdminGeneralPage() {
       })
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean
-        error?: string
+        error?: unknown
       }
       if (!res.ok || !data.ok) {
         setLoginStatus('error')
         setLoginError(
-          data.error || `Cloud rejected the key (HTTP ${res.status}).`,
+          errorToMessage(data.error, `Cloud rejected the key (HTTP ${res.status}).`),
         )
         return
       }
@@ -264,7 +286,7 @@ export default function AdminGeneralPage() {
         const result = await (window as any).shogoDesktop.startCloudLogin()
         if (!result?.ok) {
           setLoginStatus('error')
-          setLoginError(result?.error || 'Could not start workspace switch')
+          setLoginError(errorToMessage(result?.error, 'Could not start workspace switch'))
         }
         return
       }
@@ -291,6 +313,8 @@ export default function AdminGeneralPage() {
       setShogoWorkspaceName('')
       setShogoEmail('')
       setCloudKeyRejected(false)
+      setLastHeartbeatOk(null)
+      setLastHeartbeatError(null)
       setLoginStatus('idle')
       setInstanceInfo(null)
     } catch (err) {
@@ -350,16 +374,23 @@ export default function AdminGeneralPage() {
             <View className="gap-3">
               <View className={cn(
                 'flex-row items-center gap-2 rounded-lg p-3',
-                cloudKeyRejected ? 'bg-orange-500/10 border border-orange-500/20' : 'bg-green-500/10',
+                cloudKeyRejected || lastHeartbeatOk === false
+                  ? 'bg-orange-500/10 border border-orange-500/20'
+                  : 'bg-green-500/10',
               )}>
-                {cloudKeyRejected ? (
+                {cloudKeyRejected || lastHeartbeatOk === false ? (
                   <AlertTriangle size={16} className="text-orange-500" />
                 ) : (
                   <CheckCircle size={16} className="text-green-500" />
                 )}
                 <View className="flex-1">
                   <Text className="text-sm font-medium text-foreground">
-                    Signed in{shogoEmail ? ` as ${shogoEmail}` : ''}
+                    {cloudKeyRejected
+                      ? 'API key rejected by Shogo Cloud'
+                      : lastHeartbeatOk === false
+                        ? 'API key stored; cloud is unreachable'
+                        : 'Signed in'}
+                    {shogoEmail ? ` as ${shogoEmail}` : ''}
                   </Text>
                   {shogoWorkspaceName ? (
                     <Text className="text-xs text-muted-foreground">
@@ -368,7 +399,7 @@ export default function AdminGeneralPage() {
                   ) : null}
                 </View>
               </View>
-              {cloudKeyRejected && (
+              {(cloudKeyRejected || lastHeartbeatOk === false) && (
                 <View className="flex-row items-start gap-2 bg-orange-500/10 border border-orange-500/20 rounded-lg p-3">
                   <AlertTriangle size={16} className="text-orange-500 mt-0.5" />
                   <View className="flex-1">
@@ -376,8 +407,8 @@ export default function AdminGeneralPage() {
                       Cloud connection issue
                     </Text>
                     <Text className="text-xs text-muted-foreground mt-0.5">
-                      Your API key may have been revoked or expired on the cloud.
-                      Sign out and sign in again to refresh your connection.
+                      {lastHeartbeatError ||
+                        'Your API key may have been revoked or expired on the cloud. Sign out and sign in again to refresh your connection.'}
                     </Text>
                   </View>
                 </View>
