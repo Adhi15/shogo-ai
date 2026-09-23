@@ -8,7 +8,6 @@ import { chatComposerDockStyle } from "../../../lib/native-composer-keyboard";
 import {
   NATIVE_PHONE_COMPOSER_PILL_HEIGHT,
   NATIVE_PHONE_DOCK_FADE,
-  NATIVE_PHONE_GUTTER,
 } from "../../../lib/native-phone-layout";
 import { useResolvedTheme } from "../../../contexts/theme";
 import { NativePhoneBottomFade } from "../../phone/NativePhoneBottomFade";
@@ -44,17 +43,16 @@ export function ProjectComposerDock({
 }) {
   const isDark = useResolvedTheme() === "dark";
   const showPhoneFade = native || phoneViewport;
-  const nativeColumnWidth =
-    native && columnWidth != null
-      ? Math.max(0, columnWidth - NATIVE_PHONE_GUTTER * 2)
-      : columnWidth;
 
   return (
     <View className="w-full items-center">
       <Animated.View
         testID="project-composer-dock"
         style={chatComposerDockStyle({
-          measuredWidth: nativeColumnWidth,
+          // Phone web and native share the same transcript column. Applying a
+          // second native-only gutter here made the composer narrower than
+          // the mobile-web reference at the same viewport width.
+          measuredWidth: columnWidth,
           maxWidth,
           // Only use the measured keyboard overlap while the keyboard is
           // actually visible. A stale keyboard frame must never leave the

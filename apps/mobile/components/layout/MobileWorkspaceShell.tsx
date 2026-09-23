@@ -93,6 +93,7 @@ type ProjectChatState = {
 // Drawer rows use 16px text with 6px vertical padding: six whole 36px rows.
 const DRAWER_CHAT_LIST_MAX_HEIGHT = 216;
 const DRAWER_OPEN_SWIPE_DISTANCE = 48;
+const DRAWER_CLOSE_SWIPE_DISTANCE = 48;
 
 export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
   const router = useRouter();
@@ -225,6 +226,20 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
         gesture.vx > 0.45
       ) {
         openSessions();
+      }
+    },
+  }).panHandlers;
+  const sessionDrawerCloseSwipeHandlers = PanResponder.create({
+    onMoveShouldSetPanResponder: (_event, gesture) =>
+      sessionsOpen &&
+      gesture.dx < -8 &&
+      Math.abs(gesture.dx) > Math.abs(gesture.dy),
+    onPanResponderRelease: (_event, gesture) => {
+      if (
+        gesture.dx <= -DRAWER_CLOSE_SWIPE_DISTANCE ||
+        gesture.vx < -0.45
+      ) {
+        closeSessions();
       }
     },
   }).panHandlers;
@@ -573,13 +588,14 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
           animationType="none"
           onRequestClose={closeSessions}
         >
-          <View className="absolute inset-0">
+          <View className="flex-1">
             <Animated.View
-              className="absolute inset-0 bg-black/40"
+              className="absolute inset-0"
               style={{
+                backgroundColor: "#000",
                 opacity: drawerProgress.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [0, 1],
+                  outputRange: [0, 0.4],
                 }),
               }}
             />
@@ -587,11 +603,18 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
               accessibilityRole="button"
               accessibilityLabel="Close chat drawer"
               onPress={closeSessions}
-              className="absolute inset-0"
+              style={{
+                position: "absolute",
+                top: 0,
+                right: 0,
+                bottom: 0,
+                left: 0,
+              }}
             />
             <Animated.View
               accessibilityViewIsModal
               className="z-10 h-full border-r border-border/70"
+              {...sessionDrawerCloseSwipeHandlers}
               style={{
                 width: drawerWidth,
                 height: "100%",
@@ -611,7 +634,9 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
               >
                 <View className="mx-4 flex-row items-center gap-2">
                   <ShogoLogoMark className="h-6 w-6" />
-                  <View className="min-w-0 flex-1 flex-row items-center gap-2 rounded-2xl border border-border/70 bg-background px-3 py-2">
+                  <View
+                    className="h-12 min-w-0 flex-1 flex-row items-center gap-2 rounded-2xl border border-border/70 bg-background px-3"
+                  >
                     <Search
                       size={16}
                       color={icon.color}
@@ -623,7 +648,7 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
                       placeholder="Search chats"
                       placeholderTextColor="#8a8a8f"
                       accessibilityLabel="Search chats"
-                      className="min-w-0 flex-1 text-sm text-foreground web:outline-none no-focus-ring"
+                      className="h-full min-w-0 flex-1 py-0 text-sm text-foreground web:outline-none no-focus-ring"
                     />
                   </View>
                 </View>

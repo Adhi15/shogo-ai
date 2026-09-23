@@ -83,8 +83,6 @@ function getOrCreateStore(
 
   if (moduleStore !== null && moduleUserId !== userId) {
     moduleUserId = userId
-    moduleStore.clearAll()
-    clearSessionChatCollections()
     return { rawHttp: moduleRawHttpClient!, http: moduleProxiedHttpClient!, store: moduleStore, facades: moduleFacades! }
   }
 
@@ -226,6 +224,11 @@ export function SDKDomainProvider({
     onRemoteError: handleRemoteError,
   }
 
+  // Store mutations must happen after this provider commits. Clearing an MST
+  // collection during render synchronously notifies observers, which causes
+  // React's "Cannot update a component while rendering a different component"
+  // error when authentication changes on native startup.
+  const mustResetStoreForUser = moduleStore !== null && moduleUserId !== userId
   const { http, store, facades } = getOrCreateStore(
     apiBaseUrl, userId, remoteConfigRef, credentials, getAuthCookie,
   )
@@ -270,8 +273,17 @@ export function SDKDomainProvider({
   }, [remoteProxyBaseUrl, store])
 
   useEffect(() => {
+    const previousUserId = prevUserIdRef.current
+    if (
+      mustResetStoreForUser ||
+      (previousUserId !== undefined && previousUserId !== userId)
+    ) {
+      store.clearAll()
+      clearSessionChatCollections()
+      setRemoteError(null)
+    }
     prevUserIdRef.current = userId
-  }, [userId])
+  }, [mustResetStoreForUser, store, userId])
 
   useEffect(() => { setIsReady(true) }, [])
 

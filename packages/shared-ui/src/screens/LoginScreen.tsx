@@ -369,12 +369,19 @@ function SignInForm({
   error,
   onClearError,
   onScrollToBottom,
-}: Pick<LoginScreenProps, 'onSignIn' | 'onForgotPassword' | 'isLoading' | 'error' | 'onClearError'> & { onScrollToBottom?: () => void }) {
+  darkSurface = false,
+}: Pick<LoginScreenProps, 'onSignIn' | 'onForgotPassword' | 'isLoading' | 'error' | 'onClearError'> & {
+  onScrollToBottom?: () => void
+  darkSurface?: boolean
+}) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [forgotSending, setForgotSending] = useState(false)
   const passwordRef = useRef<TextInput>(null)
+  const fieldLabelClassName = darkSurface
+    ? 'text-sm font-medium text-zinc-200'
+    : 'text-sm font-medium text-foreground'
 
   const focusPassword = () => {
     passwordRef.current?.focus()
@@ -404,7 +411,7 @@ function SignInForm({
   return (
     <View className="gap-4">
       <View className="gap-1.5">
-        <Text className="text-sm font-medium text-foreground">Email</Text>
+        <Text className={fieldLabelClassName}>Email</Text>
         <Input
           placeholder="you@example.com"
           keyboardType="email-address"
@@ -421,7 +428,7 @@ function SignInForm({
 
       <View className="gap-1.5">
         <View className="flex-row justify-between items-center">
-          <Text className="text-sm font-medium text-foreground">Password</Text>
+          <Text className={fieldLabelClassName}>Password</Text>
           <Pressable
             onPress={handleForgotPassword}
             disabled={!onForgotPassword || forgotSending || isLoading}
@@ -472,7 +479,17 @@ function SignInForm({
   )
 }
 
-function SignUpForm({ onSignUp, isLoading, error, onClearError, onScrollToBottom }: Pick<LoginScreenProps, 'onSignUp' | 'isLoading' | 'error' | 'onClearError'> & { onScrollToBottom?: () => void }) {
+function SignUpForm({
+  onSignUp,
+  isLoading,
+  error,
+  onClearError,
+  onScrollToBottom,
+  darkSurface = false,
+}: Pick<LoginScreenProps, 'onSignUp' | 'isLoading' | 'error' | 'onClearError'> & {
+  onScrollToBottom?: () => void
+  darkSurface?: boolean
+}) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -480,6 +497,9 @@ function SignUpForm({ onSignUp, isLoading, error, onClearError, onScrollToBottom
   const [showPassword, setShowPassword] = useState(false)
   const emailRef = useRef<TextInput>(null)
   const passwordRef = useRef<TextInput>(null)
+  const fieldLabelClassName = darkSurface
+    ? 'text-sm font-medium text-zinc-200'
+    : 'text-sm font-medium text-foreground'
 
   const isEmailValid = useMemo(() => isValidEmail(email), [email])
   const showEmailError = emailTouched && email.length > 0 && !isEmailValid
@@ -499,7 +519,7 @@ function SignUpForm({ onSignUp, isLoading, error, onClearError, onScrollToBottom
   return (
     <View className="gap-4">
       <View className="gap-1.5">
-        <Text className="text-sm font-medium text-foreground">Name</Text>
+        <Text className={fieldLabelClassName}>Name</Text>
         <Input
           placeholder="Enter your name"
           autoCapitalize="words"
@@ -513,7 +533,7 @@ function SignUpForm({ onSignUp, isLoading, error, onClearError, onScrollToBottom
       </View>
 
       <View className="gap-1.5">
-        <Text className="text-sm font-medium text-foreground">Email</Text>
+        <Text className={fieldLabelClassName}>Email</Text>
         <View className="relative">
           <Input
             ref={emailRef}
@@ -543,7 +563,7 @@ function SignUpForm({ onSignUp, isLoading, error, onClearError, onScrollToBottom
       </View>
 
       <View className="gap-1.5">
-        <Text className="text-sm font-medium text-foreground">Password</Text>
+        <Text className={fieldLabelClassName}>Password</Text>
         <View className="relative">
           <Input
             ref={passwordRef}
@@ -1015,6 +1035,7 @@ function NativeMobileLoginPanel({
               error={displayError}
               onClearError={dismissError}
               onScrollToBottom={scrollToBottom}
+              darkSurface
             />
           ) : (
             <SignUpForm
@@ -1023,6 +1044,7 @@ function NativeMobileLoginPanel({
               error={displayError}
               onClearError={dismissError}
               onScrollToBottom={scrollToBottom}
+              darkSurface
             />
           )}
 
