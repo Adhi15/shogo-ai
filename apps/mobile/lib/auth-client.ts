@@ -3,6 +3,7 @@
 import { Platform } from 'react-native'
 import { createAuthClient } from '@shogo/shared-app/auth'
 import { createAuthClient as createBetterAuthClient } from 'better-auth/react'
+import type { BetterFetch } from 'better-auth/react'
 import { expoClient } from '@better-auth/expo/client'
 import * as SecureStore from 'expo-secure-store'
 import { API_URL } from './api-url'
@@ -47,6 +48,7 @@ function createMobileAuthClient() {
 }
 
 export const authClient = createMobileAuthClient()
+const authFetch: BetterFetch = authClient.$fetch
 
 /**
  * Native auto-sign-in must use Better Auth's client fetcher so expoClient can
@@ -63,7 +65,7 @@ export async function autoSignInLocally(): Promise<void> {
     return
   }
 
-  const result = await (authClient as any).$fetch(`${API_URL}/api/local/auto-sign-in`, {
+  const result = await authFetch<{ ok?: boolean }>(`${API_URL}/api/local/auto-sign-in`, {
     method: 'POST',
   })
   if (result?.error) {

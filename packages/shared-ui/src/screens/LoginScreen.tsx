@@ -362,6 +362,18 @@ function getPasswordStrength(password: string): { score: number; label: string; 
   return { score, ...levels[score] }
 }
 
+function authFieldStyles(darkSurface: boolean) {
+  return {
+    labelClassName: darkSurface
+      ? 'text-sm font-medium text-zinc-200'
+      : 'text-sm font-medium text-foreground',
+    inputClassName: darkSurface
+      ? 'border-zinc-700 bg-zinc-900 text-zinc-100'
+      : undefined,
+    placeholderTextColor: darkSurface ? '#A1A1AA' : undefined,
+  }
+}
+
 function SignInForm({
   onSignIn,
   onForgotPassword,
@@ -379,13 +391,11 @@ function SignInForm({
   const [showPassword, setShowPassword] = useState(false)
   const [forgotSending, setForgotSending] = useState(false)
   const passwordRef = useRef<TextInput>(null)
-  const fieldLabelClassName = darkSurface
-    ? 'text-sm font-medium text-zinc-200'
-    : 'text-sm font-medium text-foreground'
-  const fieldInputClassName = darkSurface
-    ? 'border-zinc-700 bg-zinc-900 text-zinc-100'
-    : undefined
-  const fieldPlaceholderTextColor = darkSurface ? '#A1A1AA' : undefined
+  const {
+    labelClassName,
+    inputClassName,
+    placeholderTextColor,
+  } = authFieldStyles(darkSurface)
 
   const focusPassword = () => {
     passwordRef.current?.focus()
@@ -415,7 +425,7 @@ function SignInForm({
   return (
     <View className="gap-4">
       <View className="gap-1.5">
-        <Text className={fieldLabelClassName}>Email</Text>
+        <Text className={labelClassName}>Email</Text>
         <Input
           placeholder="you@example.com"
           keyboardType="email-address"
@@ -427,14 +437,14 @@ function SignInForm({
           returnKeyType="next"
           blurOnSubmit={false}
           onSubmitEditing={focusPassword}
-          className={fieldInputClassName}
-          placeholderTextColor={fieldPlaceholderTextColor}
+          className={inputClassName}
+          placeholderTextColor={placeholderTextColor}
         />
       </View>
 
       <View className="gap-1.5">
         <View className="flex-row justify-between items-center">
-          <Text className={fieldLabelClassName}>Password</Text>
+          <Text className={labelClassName}>Password</Text>
           <Pressable
             onPress={handleForgotPassword}
             disabled={!onForgotPassword || forgotSending || isLoading}
@@ -463,8 +473,8 @@ function SignInForm({
             onSubmitEditing={handleSubmit}
             returnKeyType="go"
             onFocus={onScrollToBottom}
-            className={fieldInputClassName}
-            placeholderTextColor={fieldPlaceholderTextColor}
+            className={inputClassName}
+            placeholderTextColor={placeholderTextColor}
           />
           <PasswordVisibilityToggle
             showPassword={showPassword}
@@ -505,13 +515,11 @@ function SignUpForm({
   const [showPassword, setShowPassword] = useState(false)
   const emailRef = useRef<TextInput>(null)
   const passwordRef = useRef<TextInput>(null)
-  const fieldLabelClassName = darkSurface
-    ? 'text-sm font-medium text-zinc-200'
-    : 'text-sm font-medium text-foreground'
-  const fieldInputClassName = darkSurface
-    ? 'border-zinc-700 bg-zinc-900 text-zinc-100'
-    : undefined
-  const fieldPlaceholderTextColor = darkSurface ? '#A1A1AA' : undefined
+  const {
+    labelClassName,
+    inputClassName,
+    placeholderTextColor,
+  } = authFieldStyles(darkSurface)
 
   const isEmailValid = useMemo(() => isValidEmail(email), [email])
   const showEmailError = emailTouched && email.length > 0 && !isEmailValid
@@ -531,7 +539,7 @@ function SignUpForm({
   return (
     <View className="gap-4">
       <View className="gap-1.5">
-        <Text className={fieldLabelClassName}>Name</Text>
+        <Text className={labelClassName}>Name</Text>
         <Input
           placeholder="Enter your name"
           autoCapitalize="words"
@@ -541,13 +549,13 @@ function SignUpForm({
           returnKeyType="next"
           blurOnSubmit={false}
           onSubmitEditing={() => emailRef.current?.focus()}
-          className={fieldInputClassName}
-          placeholderTextColor={fieldPlaceholderTextColor}
+          className={inputClassName}
+          placeholderTextColor={placeholderTextColor}
         />
       </View>
 
       <View className="gap-1.5">
-        <Text className={fieldLabelClassName}>Email</Text>
+        <Text className={labelClassName}>Email</Text>
         <View className="relative">
           <Input
             ref={emailRef}
@@ -562,8 +570,8 @@ function SignUpForm({
             returnKeyType="next"
             blurOnSubmit={false}
             onSubmitEditing={focusPassword}
-            className={fieldInputClassName}
-            placeholderTextColor={fieldPlaceholderTextColor}
+            className={inputClassName}
+            placeholderTextColor={placeholderTextColor}
           />
           {emailTouched && email.length > 0 ? (
             <View className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -579,7 +587,7 @@ function SignUpForm({
       </View>
 
       <View className="gap-1.5">
-        <Text className={fieldLabelClassName}>Password</Text>
+        <Text className={labelClassName}>Password</Text>
         <View className="relative">
           <Input
             ref={passwordRef}
@@ -591,8 +599,8 @@ function SignUpForm({
             onSubmitEditing={handleSubmit}
             returnKeyType="go"
             onFocus={onScrollToBottom}
-            className={fieldInputClassName}
-            placeholderTextColor={fieldPlaceholderTextColor}
+            className={inputClassName}
+            placeholderTextColor={placeholderTextColor}
           />
           <PasswordVisibilityToggle
             showPassword={showPassword}
@@ -1029,9 +1037,8 @@ function NativeMobileLoginPanel({
           </Text>
 
           <View
-            className="flex-row rounded-xl p-1 mb-5"
+            className="mb-5 flex-row rounded-xl bg-zinc-800 p-1"
             role="tablist"
-            style={{ backgroundColor: '#343434' }}
           >
             {(['signin', 'signup'] as Tab[]).map((tab) => (
               <Pressable
@@ -1040,14 +1047,16 @@ function NativeMobileLoginPanel({
                 role="tab"
                 accessibilityState={{ selected: activeTab === tab }}
                 accessibilityLabel={tab === 'signin' ? 'Log in' : 'Sign up'}
-                className="flex-1 py-3 rounded-lg items-center"
-                style={{
-                  backgroundColor: activeTab === tab ? '#1C1C1E' : 'transparent',
-                }}
+                className={cn(
+                  'flex-1 items-center rounded-lg py-3',
+                  activeTab === tab && 'bg-zinc-900',
+                )}
               >
                 <Text
-                  className="text-base font-medium"
-                  style={{ color: activeTab === tab ? '#FAFAFA' : '#A1A1AA' }}
+                  className={cn(
+                    'text-base font-medium',
+                    activeTab === tab ? 'text-zinc-50' : 'text-zinc-400',
+                  )}
                 >
                   {tab === 'signin' ? 'Log in' : 'Sign up'}
                 </Text>

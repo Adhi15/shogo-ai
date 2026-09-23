@@ -8,6 +8,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -100,13 +101,9 @@ export function MobileSettingsSheet({
           accessibilityRole="button"
           accessibilityLabel="Close settings"
           onPress={onClose}
-          style={{
-            position: "absolute",
-            top: 0,
-            right: 0,
-            bottom: 0,
-            left: 0,
-          }}
+          // NativeWind's `absolute inset-0` does not apply reliably to this
+          // Modal backdrop Pressable.
+          style={StyleSheet.absoluteFill}
         />
         <View
           className="max-h-[88%] overflow-hidden rounded-t-[28px] bg-card"

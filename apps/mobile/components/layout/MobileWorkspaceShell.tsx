@@ -10,6 +10,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -23,6 +24,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
@@ -192,6 +194,12 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
       projectPane ?? ""
     );
   const drawerWidth = Math.min(width * 0.86, 360);
+  const sessionsOpenRef = useRef(sessionsOpen);
+  const showChatChromeRef = useRef(showChatChrome);
+  const openSessionsRef = useRef<() => void>(() => {});
+  const closeSessionsRef = useRef<() => void>(() => {});
+  sessionsOpenRef.current = sessionsOpen;
+  showChatChromeRef.current = showChatChrome;
 
   const openSessions = () => {
     setSessionsOpen(true);
@@ -211,38 +219,48 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
       useNativeDriver: true,
     }).start(() => setSessionsOpen(false));
   };
+  openSessionsRef.current = openSessions;
+  closeSessionsRef.current = closeSessions;
 
   // The mobile workspace chrome owns its drawer. Claim only clear,
   // horizontal right-swipes so vertical transcript scrolling remains native.
-  const sessionDrawerSwipeHandlers = PanResponder.create({
-    onMoveShouldSetPanResponder: (_event, gesture) =>
-      showChatChrome &&
-      !sessionsOpen &&
-      gesture.dx > 8 &&
-      Math.abs(gesture.dx) > Math.abs(gesture.dy),
-    onPanResponderRelease: (_event, gesture) => {
-      if (
-        gesture.dx >= DRAWER_OPEN_SWIPE_DISTANCE ||
-        gesture.vx > 0.45
-      ) {
-        openSessions();
-      }
-    },
-  }).panHandlers;
-  const sessionDrawerCloseSwipeHandlers = PanResponder.create({
-    onMoveShouldSetPanResponder: (_event, gesture) =>
-      sessionsOpen &&
-      gesture.dx < -8 &&
-      Math.abs(gesture.dx) > Math.abs(gesture.dy),
-    onPanResponderRelease: (_event, gesture) => {
-      if (
-        gesture.dx <= -DRAWER_CLOSE_SWIPE_DISTANCE ||
-        gesture.vx < -0.45
-      ) {
-        closeSessions();
-      }
-    },
-  }).panHandlers;
+  const sessionDrawerSwipeHandlers = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_event, gesture) =>
+          showChatChromeRef.current &&
+          !sessionsOpenRef.current &&
+          gesture.dx > 8 &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy),
+        onPanResponderRelease: (_event, gesture) => {
+          if (
+            gesture.dx >= DRAWER_OPEN_SWIPE_DISTANCE ||
+            gesture.vx > 0.45
+          ) {
+            openSessionsRef.current();
+          }
+        },
+      }).panHandlers,
+    [],
+  );
+  const sessionDrawerCloseSwipeHandlers = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_event, gesture) =>
+          sessionsOpenRef.current &&
+          gesture.dx < -8 &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy),
+        onPanResponderRelease: (_event, gesture) => {
+          if (
+            gesture.dx <= -DRAWER_CLOSE_SWIPE_DISTANCE ||
+            gesture.vx < -0.45
+          ) {
+            closeSessionsRef.current();
+          }
+        },
+      }).panHandlers,
+    [],
+  );
 
   useEffect(() => {
     if (showChatChrome) return;
@@ -603,13 +621,9 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
               accessibilityRole="button"
               accessibilityLabel="Close chat drawer"
               onPress={closeSessions}
-              style={{
-                position: "absolute",
-                top: 0,
-                right: 0,
-                bottom: 0,
-                left: 0,
-              }}
+              // NativeWind's `absolute inset-0` does not apply reliably to
+              // this Modal backdrop Pressable.
+              style={StyleSheet.absoluteFill}
             />
             <Animated.View
               accessibilityViewIsModal

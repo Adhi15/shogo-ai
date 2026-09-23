@@ -16,7 +16,7 @@ const { CHAT_TRANSCRIPT_MAX_WIDTH } = await import("../../../../lib/native-compo
 const { ProjectComposerDock } = await import("../ProjectComposerDock")
 
 describe("ProjectComposerDock", () => {
-  test("puts the animated keyboard pad on Animated.View so iOS can lift the pill", () => {
+  test("matches the native dock to the transcript column without an extra gutter", () => {
     const pad = new Animated.Value(34)
     const { container } = render(
       <ProjectComposerDock columnWidth={390} keyboardPad={pad} applyKeyboardPad native>

@@ -14,7 +14,7 @@
  * This makes the desktop the source of truth while connected.
  */
 
-import { createContext, useContext, useRef, useEffect, useState, useMemo, useCallback, type ReactNode } from 'react'
+import { Fragment, createContext, useContext, useRef, useEffect, useState, useMemo, useCallback, type ReactNode } from 'react'
 import { HttpClient } from '@shogo-ai/sdk'
 import {
   createDomainStore,
@@ -83,6 +83,9 @@ function getOrCreateStore(
 
   if (moduleStore !== null && moduleUserId !== userId) {
     moduleUserId = userId
+    if (moduleEnv) {
+      moduleEnv.context = userId ? { userId } : undefined
+    }
     return { rawHttp: moduleRawHttpClient!, http: moduleProxiedHttpClient!, store: moduleStore, facades: moduleFacades! }
   }
 
@@ -193,7 +196,9 @@ export function SDKDomainProvider({
 }: SDKDomainProviderProps) {
   const [isReady, setIsReady] = useState(false)
   const [remoteError, setRemoteError] = useState<string | null>(null)
-  const prevUserIdRef = useRef<string | null | undefined>(undefined)
+  const [storeUserId, setStoreUserId] = useState<string | null>(
+    () => moduleStore ? moduleUserId : userId,
+  )
   const prevRemoteUrlRef = useRef<string | null | undefined>(undefined)
 
   // ─── Remote config ref ──────────────────────────────────────────────
@@ -224,11 +229,6 @@ export function SDKDomainProvider({
     onRemoteError: handleRemoteError,
   }
 
-  // Store mutations must happen after this provider commits. Clearing an MST
-  // collection during render synchronously notifies observers, which causes
-  // React's "Cannot update a component while rendering a different component"
-  // error when authentication changes on native startup.
-  const mustResetStoreForUser = moduleStore !== null && moduleUserId !== userId
   const { http, store, facades } = getOrCreateStore(
     apiBaseUrl, userId, remoteConfigRef, credentials, getAuthCookie,
   )
@@ -273,17 +273,13 @@ export function SDKDomainProvider({
   }, [remoteProxyBaseUrl, store])
 
   useEffect(() => {
-    const previousUserId = prevUserIdRef.current
-    if (
-      mustResetStoreForUser ||
-      (previousUserId !== undefined && previousUserId !== userId)
-    ) {
+    if (storeUserId !== userId) {
       store.clearAll()
       clearSessionChatCollections()
       setRemoteError(null)
+      setStoreUserId(userId)
     }
-    prevUserIdRef.current = userId
-  }, [mustResetStoreForUser, store, userId])
+  }, [store, storeUserId, userId])
 
   useEffect(() => { setIsReady(true) }, [])
 
@@ -305,7 +301,9 @@ export function SDKDomainProvider({
 
   return (
     <SDKDomainContext.Provider value={contextValue}>
-      {children}
+      {storeUserId === userId ? (
+        <Fragment key={userId ?? 'signed-out'}>{children}</Fragment>
+      ) : null}
     </SDKDomainContext.Provider>
   )
 }
