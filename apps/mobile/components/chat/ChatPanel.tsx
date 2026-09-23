@@ -7190,6 +7190,7 @@ const ChatPanelContent = observer(function ChatPanelContent({
               chat input). */}
                 {hasScrollableTranscript &&
                   !isFollowing &&
+                  !nativeKeyboardOpen &&
                   displayMessages.length > 0 && (
                     <View
                       pointerEvents="box-none"
