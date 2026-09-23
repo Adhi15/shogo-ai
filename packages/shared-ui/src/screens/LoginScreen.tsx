@@ -382,6 +382,10 @@ function SignInForm({
   const fieldLabelClassName = darkSurface
     ? 'text-sm font-medium text-zinc-200'
     : 'text-sm font-medium text-foreground'
+  const fieldInputClassName = darkSurface
+    ? 'border-zinc-700 bg-zinc-900 text-zinc-100'
+    : undefined
+  const fieldPlaceholderTextColor = darkSurface ? '#A1A1AA' : undefined
 
   const focusPassword = () => {
     passwordRef.current?.focus()
@@ -423,6 +427,8 @@ function SignInForm({
           returnKeyType="next"
           blurOnSubmit={false}
           onSubmitEditing={focusPassword}
+          className={fieldInputClassName}
+          placeholderTextColor={fieldPlaceholderTextColor}
         />
       </View>
 
@@ -457,6 +463,8 @@ function SignInForm({
             onSubmitEditing={handleSubmit}
             returnKeyType="go"
             onFocus={onScrollToBottom}
+            className={fieldInputClassName}
+            placeholderTextColor={fieldPlaceholderTextColor}
           />
           <PasswordVisibilityToggle
             showPassword={showPassword}
@@ -500,6 +508,10 @@ function SignUpForm({
   const fieldLabelClassName = darkSurface
     ? 'text-sm font-medium text-zinc-200'
     : 'text-sm font-medium text-foreground'
+  const fieldInputClassName = darkSurface
+    ? 'border-zinc-700 bg-zinc-900 text-zinc-100'
+    : undefined
+  const fieldPlaceholderTextColor = darkSurface ? '#A1A1AA' : undefined
 
   const isEmailValid = useMemo(() => isValidEmail(email), [email])
   const showEmailError = emailTouched && email.length > 0 && !isEmailValid
@@ -529,6 +541,8 @@ function SignUpForm({
           returnKeyType="next"
           blurOnSubmit={false}
           onSubmitEditing={() => emailRef.current?.focus()}
+          className={fieldInputClassName}
+          placeholderTextColor={fieldPlaceholderTextColor}
         />
       </View>
 
@@ -548,6 +562,8 @@ function SignUpForm({
             returnKeyType="next"
             blurOnSubmit={false}
             onSubmitEditing={focusPassword}
+            className={fieldInputClassName}
+            placeholderTextColor={fieldPlaceholderTextColor}
           />
           {emailTouched && email.length > 0 ? (
             <View className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -575,6 +591,8 @@ function SignUpForm({
             onSubmitEditing={handleSubmit}
             returnKeyType="go"
             onFocus={onScrollToBottom}
+            className={fieldInputClassName}
+            placeholderTextColor={fieldPlaceholderTextColor}
           />
           <PasswordVisibilityToggle
             showPassword={showPassword}
