@@ -79,6 +79,17 @@ async function readStoredKeyInfo(localDb: any): Promise<{ workspace?: { id?: str
   }
 }
 
+function errorToMessage(error: unknown, fallback: string): string {
+  if (typeof error === 'string' && error.trim()) return error
+  if (error && typeof error === 'object') {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message
+    const code = (error as { code?: unknown }).code
+    if (typeof code === 'string' && code.trim()) return code
+  }
+  return fallback
+}
+
 /**
  * Register local-mode cloud session routes. Only call when SHOGO_LOCAL_MODE=true.
  */
@@ -151,6 +162,7 @@ export function localAuthRoutes() {
       })
       const data = await res.json().catch(() => ({} as any))
       if (!res.ok || data?.ok === false) {
+        const errorMessage = errorToMessage(data?.error, `HTTP ${res.status}`)
         // 401 ⇒ key revoked or superseded; surface so the UI can prompt
         // the user to re-sign-in. We never wipe credentials automatically.
         if (res.status === 401) {
@@ -164,10 +176,10 @@ export function localAuthRoutes() {
         }
         lastHeartbeatOk = false
         lastHeartbeatAt = Date.now()
-        lastHeartbeatError = data?.error || `HTTP ${res.status}`
+        lastHeartbeatError = errorMessage
         return c.json({
           ok: false,
-          error: data?.error || `HTTP ${res.status}`,
+          error: errorMessage,
           cloudKeyRejected: res.status === 401,
           ...(res.status === 401 ? { keyPrefix: key.slice(0, 16) } : {}),
         }, res.status as any)
@@ -178,10 +190,11 @@ export function localAuthRoutes() {
       lastHeartbeatError = null
       return c.json({ ok: true })
     } catch (err: any) {
+      const errorMessage = err?.message || 'Heartbeat failed'
       lastHeartbeatOk = false
       lastHeartbeatAt = Date.now()
-      lastHeartbeatError = err?.message || 'Heartbeat failed'
-      return c.json({ ok: false, error: err?.message || 'Heartbeat failed' }, 502)
+      lastHeartbeatError = errorMessage
+      return c.json({ ok: false, error: errorMessage }, 502)
     }
   })
 
