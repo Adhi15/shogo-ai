@@ -1028,7 +1028,11 @@ function NativeMobileLoginPanel({
             {activeTab === 'signin' ? 'Log in to keep building.' : 'Start turning your ideas into software.'}
           </Text>
 
-          <View className="flex-row bg-secondary rounded-xl p-1 mb-5" role="tablist">
+          <View
+            className="flex-row rounded-xl p-1 mb-5"
+            role="tablist"
+            style={{ backgroundColor: '#343434' }}
+          >
             {(['signin', 'signup'] as Tab[]).map((tab) => (
               <Pressable
                 key={tab}
@@ -1036,9 +1040,15 @@ function NativeMobileLoginPanel({
                 role="tab"
                 accessibilityState={{ selected: activeTab === tab }}
                 accessibilityLabel={tab === 'signin' ? 'Log in' : 'Sign up'}
-                className={cn('flex-1 py-3 rounded-lg items-center', activeTab === tab ? 'bg-card' : '')}
+                className="flex-1 py-3 rounded-lg items-center"
+                style={{
+                  backgroundColor: activeTab === tab ? '#1C1C1E' : 'transparent',
+                }}
               >
-                <Text className={cn('text-base font-medium', activeTab === tab ? 'text-foreground' : 'text-muted-foreground')}>
+                <Text
+                  className="text-base font-medium"
+                  style={{ color: activeTab === tab ? '#FAFAFA' : '#A1A1AA' }}
+                >
                   {tab === 'signin' ? 'Log in' : 'Sign up'}
                 </Text>
               </Pressable>
