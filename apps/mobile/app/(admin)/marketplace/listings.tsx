@@ -39,7 +39,7 @@ import {
   STATUS_PILL,
   ALL_LISTING_STATUSES,
   type ListingStatus,
-} from './_helpers'
+} from '../../../components/admin/marketplaceHelpers'
 
 interface AdminListing {
   id: string

@@ -6,7 +6,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Eye, EyeOff } from 'lucide-react-native'
 import { api, createHttpClient } from '../../lib/api'
 import { Button, Input, Alert, AlertDescription } from '@shogo/shared-ui/primitives'
-import { AuthSurface } from './AuthSurface'
+import { AuthSurface } from '../../components/auth/AuthSurface'
 
 const TOGGLE_ICON = '#71717a'
 const ACTIVITY_ON_BRAND = '#ffffff'
