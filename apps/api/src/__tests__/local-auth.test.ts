@@ -297,6 +297,20 @@ describe('POST /local/cloud-login/heartbeat', () => {
     expect(body.error).toBe('ECONNREFUSED')
   })
 
+  test('normalizes a structured fetch error in the 502 response', async () => {
+    findUniqueMock.mockImplementation(async () => ({ value: 'sk' }))
+    mockFetch(() => {
+      throw { code: 'UPSTREAM_TIMEOUT', message: 'Cloud did not respond' }
+    })
+    const app = mountApp()
+    const res = await app.request('/api/local/cloud-login/heartbeat', { method: 'POST' })
+    expect(res.status).toBe(502)
+    expect(await res.json()).toMatchObject({
+      ok: false,
+      error: 'Cloud did not respond',
+    })
+  })
+
   test('clears cloudKeyRejected when a subsequent heartbeat succeeds', async () => {
     findUniqueMock.mockImplementation(async () => ({ value: 'sk' }))
     // First, set the flag via a 401.

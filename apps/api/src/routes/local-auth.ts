@@ -30,6 +30,7 @@
  */
 
 import { Hono } from 'hono'
+import { toErrorMessage } from '@shogo-ai/sdk'
 import { prisma } from '../lib/prisma'
 import { getShogoCloudUrl } from '../lib/cloud-urls'
 import { onUpstreamRejection } from '../lib/federated-upstream'
@@ -77,17 +78,6 @@ async function readStoredKeyInfo(localDb: any): Promise<{ workspace?: { id?: str
   } catch {
     return null
   }
-}
-
-function errorToMessage(error: unknown, fallback: string): string {
-  if (typeof error === 'string' && error.trim()) return error
-  if (error && typeof error === 'object') {
-    const message = (error as { message?: unknown }).message
-    if (typeof message === 'string' && message.trim()) return message
-    const code = (error as { code?: unknown }).code
-    if (typeof code === 'string' && code.trim()) return code
-  }
-  return fallback
 }
 
 /**
@@ -162,7 +152,7 @@ export function localAuthRoutes() {
       })
       const data = await res.json().catch(() => ({} as any))
       if (!res.ok || data?.ok === false) {
-        const errorMessage = errorToMessage(data?.error, `HTTP ${res.status}`)
+        const errorMessage = toErrorMessage(data?.error, `HTTP ${res.status}`)
         // 401 ⇒ key revoked or superseded; surface so the UI can prompt
         // the user to re-sign-in. We never wipe credentials automatically.
         if (res.status === 401) {
@@ -189,8 +179,8 @@ export function localAuthRoutes() {
       lastHeartbeatAt = Date.now()
       lastHeartbeatError = null
       return c.json({ ok: true })
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Heartbeat failed'
+    } catch (err: unknown) {
+      const errorMessage = toErrorMessage(err, 'Heartbeat failed')
       lastHeartbeatOk = false
       lastHeartbeatAt = Date.now()
       lastHeartbeatError = errorMessage

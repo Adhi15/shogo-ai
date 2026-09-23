@@ -36,7 +36,12 @@ import {
   ShieldCheck,
 } from 'lucide-react-native'
 import { cn } from '@shogo/shared-ui/primitives'
-import { PlatformApi, type InstanceInfo, type FeatureFlagOverrides } from '@shogo-ai/sdk'
+import {
+  PlatformApi,
+  toErrorMessage,
+  type InstanceInfo,
+  type FeatureFlagOverrides,
+} from '@shogo-ai/sdk'
 import { API_URL, createHttpClient } from '../../lib/api'
 import { useAccentTheme } from '../../contexts/accent-theme'
 import { ACCENT_PRESETS, ACCENT_NAMES } from '../../lib/accent-themes'
@@ -51,17 +56,6 @@ function hasDesktopBridge(): boolean {
 }
 
 const SHOGO_CLOUD_URL_DEFAULT = 'https://studio.shogo.ai'
-
-function errorToMessage(error: unknown, fallback = ''): string {
-  if (typeof error === 'string' && error.trim()) return error
-  if (error && typeof error === 'object') {
-    const message = (error as { message?: unknown }).message
-    if (typeof message === 'string' && message.trim()) return message
-    const code = (error as { code?: unknown }).code
-    if (typeof code === 'string' && code.trim()) return code
-  }
-  return fallback
-}
 
 export default function AdminGeneralPage() {
   const { localMode } = usePlatformConfig()
@@ -117,7 +111,7 @@ export default function AdminGeneralPage() {
       setShogoKeyMask(status.keyPrefix ? `${status.keyPrefix}…` : '')
       setCloudKeyRejected(!!status.cloudKeyRejected)
       setLastHeartbeatOk(status.lastHeartbeatOk ?? null)
-      setLastHeartbeatError(errorToMessage((status as any).lastHeartbeatError) || null)
+      setLastHeartbeatError(toErrorMessage(status.lastHeartbeatError) || null)
       if (status.cloudUrl) {
         setCloudUrl(status.cloudUrl)
       }
@@ -162,7 +156,7 @@ export default function AdminGeneralPage() {
         void loadStatus()
       } else {
         setLoginStatus('error')
-        setLoginError(errorToMessage(result.error, 'Sign-in was cancelled'))
+        setLoginError(toErrorMessage(result.error, 'Sign-in was cancelled'))
       }
     })
 
@@ -179,7 +173,7 @@ export default function AdminGeneralPage() {
       if (cancelled) return
       setCloudKeyRejected(status.cloudKeyRejected)
       setLastHeartbeatOk(status.lastHeartbeatOk ?? (status.connected ? true : false))
-      setLastHeartbeatError(errorToMessage(status.error) || null)
+      setLastHeartbeatError(toErrorMessage(status.error) || null)
     })
 
     return () => {
@@ -200,7 +194,7 @@ export default function AdminGeneralPage() {
         const result = await (window as any).shogoDesktop.startCloudLogin()
         if (!result?.ok) {
           setLoginStatus('error')
-          setLoginError(errorToMessage(result?.error, 'Could not start the API-key connection'))
+          setLoginError(toErrorMessage(result?.error, 'Could not start the API-key connection'))
         }
         return
       }
@@ -256,7 +250,7 @@ export default function AdminGeneralPage() {
       if (!res.ok || !data.ok) {
         setLoginStatus('error')
         setLoginError(
-          errorToMessage(data.error, `Cloud rejected the key (HTTP ${res.status}).`),
+          toErrorMessage(data.error, `Cloud rejected the key (HTTP ${res.status}).`),
         )
         return
       }
@@ -292,7 +286,7 @@ export default function AdminGeneralPage() {
         const result = await (window as any).shogoDesktop.startCloudLogin()
         if (!result?.ok) {
           setLoginStatus('error')
-          setLoginError(errorToMessage(result?.error, 'Could not start workspace switch'))
+          setLoginError(toErrorMessage(result?.error, 'Could not start workspace switch'))
         }
         return
       }
