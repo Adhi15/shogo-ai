@@ -8,8 +8,8 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { observer } from "mobx-react-lite";
 import { Sparkles, X } from "lucide-react-native";
 import { useAuth } from "../../contexts/auth";
@@ -28,6 +28,7 @@ import { pickTeamWorkspace } from "../../lib/team-workspace";
 import { useActiveWorkspace } from "../../hooks/useActiveWorkspace";
 import { useWorkspaceExperience } from "../../hooks/useWorkspaceExperience";
 import { clearChatPrefill, useChatPrefill } from "../../hooks/useChatPrefill";
+import { mobileWorkspaceHeaderClearance } from "../../lib/mobile-workspace-header-layout";
 import { api, type PersonalAgentProfile } from "../../lib/api";
 import { ChatPanel } from "../chat/ChatPanel";
 import type { RestoreDraftRequest } from "../chat/ChatInput";
@@ -372,7 +373,11 @@ export const WorkspaceAgentChatScreen = observer(
           // the first normal-flow content on this screen — need their own
           // clearance to avoid starting underneath the avatar/name/status
           // cluster (and the shell's floating menu/bell buttons).
-          <View style={{ height: insets.top + 112 }} />
+          <View
+            style={{
+              height: mobileWorkspaceHeaderClearance(insets.top, "identity"),
+            }}
+          />
         ) : null}
         {isPersonalWorkspace && showWelcome ? (
           <View className="mx-auto mt-3 w-full max-w-2xl px-4">

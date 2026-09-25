@@ -4,10 +4,11 @@ import { describe, expect, test } from 'bun:test'
 import { nativeContentWidth, nativePhoneCanvas, nativePhoneDockBlockingBodyMaxHeight, nativePhoneDockStatusMaxHeight, nativePhoneDockFadeColors, nativePhoneDockGlassStyle, nativePhoneFillStyle, nativePhoneIconColor, nativePhoneSheetKeyboardLift, nativePhoneSheetPanelStyle, nativePhoneSheetBackdropStyle, nativeSettingsPaneFill, nativeSettingsPaneRootStyle, nativeSettingsPaneStyle, nativeSkillsActionWidths, nativeEqualChipWidths, nativeGridChipWidth, nativeTwoColumnCardWidth, hexToRgbChannels, phoneChromeEnabled, NATIVE_PHONE_CANVAS, NATIVE_PHONE_DOCK_COMPOSER_GAP, NATIVE_PHONE_DOCK_BLOCKING_MAX_HEIGHT, NATIVE_PHONE_DOCK_BLOCKING_MIN_HEIGHT, NATIVE_PHONE_DOCK_STATUS_MAX_HEIGHT, NATIVE_PHONE_DOCK_STATUS_MIN_HEIGHT, NATIVE_PHONE_DOCK_FADE, NATIVE_PHONE_DOCK_GLASS, NATIVE_PHONE_HEADER_ICON_SIZE, NATIVE_PHONE_HOME_CANVAS, NATIVE_PHONE_ICON, NATIVE_PHONE_ICON_STROKE, NATIVE_PHONE_SHEET_CANVAS, NATIVE_PHONE_GUTTER, NATIVE_WIND_SPACE_4, isPhoneLayout, WEB_PHONE_MAX_WIDTH, WEB_WIDE_MIN_WIDTH } from '../native-phone-layout'
 
 describe('isPhoneLayout', () => {
-  test('treats a narrow web viewport as phone chrome', () => {
+  test('uses the same width breakpoint for every renderer', () => {
     expect(isPhoneLayout(390, 844)).toBe(true)
     expect(isPhoneLayout(WEB_PHONE_MAX_WIDTH, 800)).toBe(true)
     expect(isPhoneLayout(WEB_WIDE_MIN_WIDTH, 800)).toBe(false)
+    expect(isPhoneLayout(844, 390)).toBe(false)
   })
 })
 
@@ -135,7 +136,7 @@ describe('hexToRgbChannels', () => {
 })
 
 describe('phoneChromeEnabled', () => {
-  test('stays off on wide web so desktop studio keeps className theme colors', () => {
+  test('stays off for every wide layout', () => {
     expect(phoneChromeEnabled(390, 844)).toBe(true)
     expect(phoneChromeEnabled(WEB_PHONE_MAX_WIDTH, 800)).toBe(true)
     expect(phoneChromeEnabled(1280, 800)).toBe(false)

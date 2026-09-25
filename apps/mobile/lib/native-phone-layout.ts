@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2026 Shogo Technologies, Inc.
 /**
- * Handset vs tablet detection for phone chrome and native Yoga workarounds.
+ * Cross-platform phone-layout contract plus native Yoga workarounds.
  *
- * - Native iOS: iPad via `Platform.isPad`.
- * - Native Android: smallest window edge vs sw600dp-style threshold.
- * - Web: phone chrome at `WEB_PHONE_MAX_WIDTH` (iPhone Safari / Expo web).
- *   Desktop studio and Electron stay on the existing wide layout.
- * Yoga pixel-width helpers stay native-only (`isNativePhoneIntegrationsLayout`).
+ * Product layout is selected by the same viewport breakpoint on web, iOS, and
+ * Android. Native device detection is retained only for Yoga-specific width
+ * workarounds; it must not choose a different product layout.
  */
 import { Platform, StyleSheet, useWindowDimensions, type ViewStyle } from 'react-native'
 import { useResolvedTheme } from '../contexts/theme'
@@ -33,20 +31,18 @@ export function isNativePlatform(): boolean {
 /** Matches app `isWide` (`width >= 768`). Phone chrome applies at or below this. */
 export const WEB_PHONE_MAX_WIDTH = 767
 
-/**
- * Phone chrome: native handset, or a narrow web viewport.
- * Does not enable Yoga pixel-width workarounds on web.
- */
 export const WEB_WIDE_MIN_WIDTH = WEB_PHONE_MAX_WIDTH + 1;
 /** Admin shell intentionally uses a wider desktop breakpoint than the app shell. */
 export const ADMIN_WEB_WIDE_MIN_WIDTH = 900;
 
 /**
- * Phone chrome: native handset, or a narrow web viewport.
- * Does not enable Yoga pixel-width workarounds on web.
+ * Product UI contract: the same viewport gets the same phone or wide layout
+ * regardless of whether it is rendered by React Native Web, iOS, or Android.
+ *
+ * Height remains an argument so callers can supply `useWindowDimensions()`
+ * directly and so the contract can grow without another API migration.
  */
-export function isPhoneLayout(width: number, height: number): boolean {
-  if (isNativePlatform()) return isNativePhoneIntegrationsLayout(width, height)
+export function isPhoneLayout(width: number, _height: number): boolean {
   return width <= WEB_PHONE_MAX_WIDTH
 }
 
@@ -97,12 +93,9 @@ export function nativePhoneIconColor(isDark: boolean): string {
   return isDark ? NATIVE_PHONE_ICON.dark : NATIVE_PHONE_ICON.light
 }
 
-/**
- * Phone icon/sheet chrome: native (iPhone, iPad, Android) or a narrow web
- * viewport. Desktop studio, Electron, and wide web keep className theme colors.
- */
+/** Phone icon/sheet chrome follows the shared product layout breakpoint. */
 export function phoneChromeEnabled(width: number, height: number): boolean {
-  return isNativePlatform() || isPhoneLayout(width, height)
+  return isPhoneLayout(width, height)
 }
 
 export function useNativePhoneIconChrome(): { color: string; strokeWidth: number } {
@@ -426,8 +419,8 @@ export function nativeTwoColumnCardWidth(
 }
 
 /**
- * One `useWindowDimensions` subscription for phone detection and pixel widths.
- * Prefer this over calling the hook plus `Dimensions.get` in the same component.
+ * One `useWindowDimensions` subscription for native Yoga workarounds and
+ * pixel widths. Use `usePhoneLayout` for shared product-layout decisions.
  */
 export function useNativePhoneWindow(): {
   isPhone: boolean
@@ -442,7 +435,7 @@ export function useNativePhoneWindow(): {
   }
 }
 
-/** True on iPhone / Android phones. Web and tablets stay on the existing layout. */
+/** True only on native phones; use `usePhoneLayout` for shared layout. */
 export function useIsNativePhoneLayout(): boolean {
   const { width, height } = useWindowDimensions()
   return isNativePhoneIntegrationsLayout(width, height)

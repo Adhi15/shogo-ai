@@ -130,6 +130,7 @@ import {
   isPhoneLayout,
   useNativePhoneWindow,
 } from "../../lib/native-phone-layout";
+import { mobileWorkspaceHeaderClearance } from "../../lib/mobile-workspace-header-layout";
 import { canvasViewerPayload } from "../../lib/canvas-viewer";
 import {
   CHAT_TRANSCRIPT_MAX_WIDTH,
@@ -6444,6 +6445,12 @@ const ChatPanelContent = observer(function ChatPanelContent({
   const nativePhoneColumnWidth = isPhoneViewport
     ? Math.max(0, windowWidth)
     : undefined;
+  const phoneTranscriptTopClearance = isPhoneViewport
+    ? mobileWorkspaceHeaderClearance(
+        insets.top,
+        phoneTranscriptTopPadding === "floating-agent" ? "identity" : "chrome",
+      )
+    : undefined;
 
   // Memoizing the context value is the single biggest win for streaming
   // re-renders. Previously this was a fresh object literal on every
@@ -7036,9 +7043,7 @@ const ChatPanelContent = observer(function ChatPanelContent({
                   style={chatMessagesScrollStyles.scroll}
                   contentContainerClassName={cn(
                     isPhoneViewport
-                      ? phoneTranscriptTopPadding === "floating-agent"
-                        ? "px-4 pt-32 pb-36"
-                        : "px-4 pt-16 pb-36"
+                      ? "px-4 pb-36"
                       : presentation === "agent"
                       ? "px-6 pt-8 pb-[48px]"
                       : "p-2 pb-[40px]",
@@ -7048,7 +7053,10 @@ const ChatPanelContent = observer(function ChatPanelContent({
                   )}
                   contentContainerStyle={
                     nativePhoneColumnWidth
-                      ? { width: nativePhoneColumnWidth }
+                      ? {
+                          width: nativePhoneColumnWidth,
+                          paddingTop: phoneTranscriptTopClearance,
+                        }
                       : // Same belt-and-suspenders cap as the composer below —
                         // pins the `max-w-2xl` width even if the className
                         // doesn't resolve on this content container.
@@ -7059,6 +7067,7 @@ const ChatPanelContent = observer(function ChatPanelContent({
                               : CHAT_TRANSCRIPT_MAX_WIDTH,
                           width: "100%",
                           alignSelf: "center" as const,
+                          paddingTop: phoneTranscriptTopClearance,
                         }
                   }
                   keyboardShouldPersistTaps={
@@ -7209,30 +7218,29 @@ const ChatPanelContent = observer(function ChatPanelContent({
                 column and report 0, so this spacer stays unused. */}
                   {dockHeight > 0 && <View style={{ height: dockHeight }} />}
                 </ScrollView>
-                {presentation === "agent" &&
-                phoneTranscriptTopPadding === "floating-agent" ? (
+                {presentation === "agent" && isPhoneViewport ? (
                   <LinearGradient
                     pointerEvents="none"
                     colors={
                       isDark
                         ? [
-                            "rgba(16,16,16,0.94)",
-                            "rgba(16,16,16,0.62)",
+                            "rgba(16,16,16,0.98)",
+                            "rgba(16,16,16,0.9)",
                             "rgba(16,16,16,0)",
                           ]
                         : [
-                            "rgba(255,255,255,0.94)",
-                            "rgba(255,255,255,0.62)",
+                            "rgba(255,255,255,0.98)",
+                            "rgba(255,255,255,0.9)",
                             "rgba(255,255,255,0)",
                           ]
                     }
-                    locations={[0, 0.48, 1]}
+                    locations={[0, 0.68, 1]}
                     style={{
                       position: "absolute",
                       top: 0,
                       left: 0,
                       right: 0,
-                      height: 116,
+                      height: phoneTranscriptTopClearance ?? 0,
                       zIndex: 5,
                     }}
                   />
