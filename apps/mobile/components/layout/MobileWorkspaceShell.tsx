@@ -71,6 +71,7 @@ import {
   getPinnedProjectIds,
   setPinnedProjectIds,
 } from "../../lib/project-prefs-store";
+import { projectSidebarEvents } from "../../lib/project-sidebar-events";
 import { RenameProjectModal } from "../project/topbar/dropdown/RenameProjectModal";
 import {
   NATIVE_PHONE_HEADER_ICON_SIZE,
@@ -268,6 +269,17 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
   );
   openSessionsRef.current = openSessions;
   closeSessionsRef.current = closeSessions;
+
+  // Project detail uses NativePhoneHeader, whose menu button emits this
+  // existing event. The legacy app drawer intentionally ignores it while this
+  // shell owns the screen, so this shell must claim it and open its drawer.
+  useEffect(
+    () =>
+      projectSidebarEvents.subscribeOpenProject(() => {
+        openSessionsRef.current();
+      }),
+    []
+  );
 
   // The mobile workspace chrome owns its drawer. Claim only clear,
   // horizontal right-swipes so vertical transcript scrolling remains native.

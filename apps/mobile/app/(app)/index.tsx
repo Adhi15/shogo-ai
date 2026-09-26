@@ -276,7 +276,11 @@ export const HomeScreen = observer(function HomeScreen({
   const isNarrowAgentSurface = Platform.OS !== 'web' || screenWidth < WEB_WIDE_MIN_WIDTH
   const usesMobileWorkspaceChrome = useMobileWorkspaceChrome()
   const homeEntrance = useRef(new Animated.Value(Platform.OS === 'web' ? 1 : 0)).current
-  const restComposerPad = Math.max(insets.bottom, NATIVE_COMPOSER_KEYBOARD_GAP)
+  // The phone tab bar already owns the bottom safe-area inset. Match
+  // ChatPanel so Home reserves only the visual gap above that bar.
+  const restComposerPad = isNativePhone
+    ? NATIVE_COMPOSER_KEYBOARD_GAP
+    : Math.max(insets.bottom, NATIVE_COMPOSER_KEYBOARD_GAP)
   const restComposerSidePad = NATIVE_PHONE_GUTTER
   const iosComposerAvoiding = Platform.OS === 'ios'
   const composerKeyboardPad = useNativeComposerDockPad({
@@ -697,14 +701,19 @@ export const HomeScreen = observer(function HomeScreen({
       // Consume the draft so subsequent home interactions create a new one.
       draftRef.current = null
       router.push({
-        pathname: '/(app)/projects/[id]',
+        // Native project creation should land on the same standalone chat
+        // route used after returning to a project. The full project-detail
+        // layout has different header/chrome during its initial render.
+        pathname:
+          Platform.OS === 'web'
+            ? '/(app)/projects/[id]'
+            : '/(app)/project-chat/[id]',
         params: {
           id: consumed.projectId,
           chatSessionId: consumed.chatSessionId,
           chatScope: consumed.chatScope,
           initialMessage: text,
           initialInteractionMode: submissionInteractionMode,
-          ...(Platform.OS !== 'web' ? { tab: 'chat-fullscreen' } : {}),
         },
       } as any)
 
