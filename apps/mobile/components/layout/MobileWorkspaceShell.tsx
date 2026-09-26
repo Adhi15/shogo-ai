@@ -196,7 +196,12 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
     pathname.match(/\/(?:projects|project-chat)\/([^/?]+)/)?.[1] ?? null;
   const projectPane =
     routeParams.navTab ?? routeParams.surface ?? routeParams.tab;
+  // Full project detail routes render their own native header. Standalone
+  // project-chat routes do not, so they continue to use this shared menu/bell
+  // chrome.
+  const isProjectDetailRoute = /\/projects\//.test(pathname);
   const showChatChrome =
+    !isProjectDetailRoute &&
     !pathname.includes("/project-surface/") &&
     !["canvas", "external-preview", "app-preview", "files", "plans"].includes(
       projectPane ?? ""
@@ -227,6 +232,40 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
       useNativeDriver: true,
     }).start(() => setSessionsOpen(false));
   };
+  const workspaceSheetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
+  const openWorkspaceSwitcher = () => {
+    // Android/web can present the workspace sheet over the open drawer. Keep
+    // that established interaction intact; only iOS needs to dismiss the
+    // existing React Native Modal before presenting the next one.
+    if (Platform.OS !== "ios") {
+      setWorkspaceSheetOpen(true);
+      return;
+    }
+
+    closeSessions();
+    if (workspaceSheetTimerRef.current) {
+      clearTimeout(workspaceSheetTimerRef.current);
+    }
+    workspaceSheetTimerRef.current = setTimeout(
+      () => {
+        workspaceSheetTimerRef.current = null;
+        setWorkspaceSheetOpen(true);
+      },
+      prefersReducedMotion ? 0 : 200
+    );
+  };
+
+  useEffect(
+    () => () => {
+      if (workspaceSheetTimerRef.current) {
+        clearTimeout(workspaceSheetTimerRef.current);
+      }
+    },
+    []
+  );
   openSessionsRef.current = openSessions;
   closeSessionsRef.current = closeSessions;
 
@@ -651,7 +690,7 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
                 style={{ paddingTop: insets.top + 12 }}
               >
                 <MobileWorkspaceSwitcherRow
-                  onPress={() => setWorkspaceSheetOpen(true)}
+                  onPress={openWorkspaceSwitcher}
                 />
                 <View className="mx-4 flex-row items-center gap-2">
                   <Pressable

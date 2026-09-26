@@ -948,12 +948,32 @@ export const HomeScreen = observer(function HomeScreen({
           <GetStartedChecklist state={gettingStarted} />
         </View>
       ) : null}
-      <Text
-        className={`text-center text-foreground ${isNativePhone ? 'font-medium' : 'font-bold mb-2'}`}
-        style={heroTitleStyle}
-      >
-        {isNativePhone ? `What are we building,\n${firstName}?` : `What are we building, ${firstName}?`}
-      </Text>
+      {isNativePhone ? (
+        <View className="w-full items-center">
+          <Text
+            className="text-center font-medium text-foreground"
+            style={heroTitleStyle}
+          >
+            What are we building,
+          </Text>
+          <Text
+            className="w-full text-center font-medium text-foreground"
+            style={heroTitleStyle}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+          >
+            {firstName}?
+          </Text>
+        </View>
+      ) : (
+        <Text
+          className="text-center font-bold mb-2 text-foreground"
+          style={heroTitleStyle}
+        >
+          {`What are we building, ${firstName}?`}
+        </Text>
+      )}
       {!localMode && currentExperience.kind === 'team' ? (
         <Text
           className={`text-center text-muted-foreground ${isNativePhone ? 'mt-2' : 'mb-6'}`}
