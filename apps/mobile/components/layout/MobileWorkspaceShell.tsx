@@ -233,37 +233,30 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
       useNativeDriver: true,
     }).start(() => setSessionsOpen(false));
   };
-  const workspaceSheetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
+  const openWorkspaceSheetAfterDrawerDismissRef = useRef(false);
 
   const openWorkspaceSwitcher = () => {
     // Android/web can present the workspace sheet over the open drawer. Keep
     // that established interaction intact; only iOS needs to dismiss the
-    // existing React Native Modal before presenting the next one.
+    // existing React Native Modal before presenting the next one. Wait for
+    // the modal's native dismissal event rather than guessing with a timer.
     if (Platform.OS !== "ios") {
       setWorkspaceSheetOpen(true);
       return;
     }
 
-    closeSessions();
-    if (workspaceSheetTimerRef.current) {
-      clearTimeout(workspaceSheetTimerRef.current);
+    if (!sessionsOpenRef.current) {
+      setWorkspaceSheetOpen(true);
+      return;
     }
-    workspaceSheetTimerRef.current = setTimeout(
-      () => {
-        workspaceSheetTimerRef.current = null;
-        setWorkspaceSheetOpen(true);
-      },
-      prefersReducedMotion ? 0 : 200
-    );
+
+    openWorkspaceSheetAfterDrawerDismissRef.current = true;
+    closeSessions();
   };
 
   useEffect(
     () => () => {
-      if (workspaceSheetTimerRef.current) {
-        clearTimeout(workspaceSheetTimerRef.current);
-      }
+      openWorkspaceSheetAfterDrawerDismissRef.current = false;
     },
     []
   );
@@ -660,6 +653,11 @@ export function MobileWorkspaceShell({ children }: MobileWorkspaceShellProps) {
           transparent
           animationType="none"
           onRequestClose={closeSessions}
+          onDismiss={() => {
+            if (!openWorkspaceSheetAfterDrawerDismissRef.current) return;
+            openWorkspaceSheetAfterDrawerDismissRef.current = false;
+            setWorkspaceSheetOpen(true);
+          }}
         >
           <View className="flex-1">
             <Animated.View
