@@ -57,6 +57,8 @@ import {
 } from './project-data-archive'
 import {
   describeRepoArchive,
+  preserveRepoArchive,
+  statRepoArchive,
   uploadRepoArchiveGuarded,
   type RepoLineage,
   type RepoWriteOutcome,
@@ -246,6 +248,23 @@ export interface AssignedVm {
   repoParentEtag?: string
   /** Sticky: repo hydrate failed, so exports must not clobber the durable `.git`. */
   repoUntrustedReason?: string
+  /**
+   * Epoch ms from which this VM's workspace is its own: the assign for a cold
+   * boot, the snapshot's suspend for a resume. A durable write after this came
+   * from some other VM.
+   */
+  stateSince?: number
+  /**
+   * The assign-time repo hydrate is still running. The guest's `.git` is the
+   * template seed until it lands, so it must not be exported yet.
+   */
+  repoHydratePending?: boolean
+  /**
+   * This VM hydrated `.git` against the durable archive at assign. With no
+   * parent etag that means no archive existed then, so a later conflict is
+   * another VM's write and never grounds for promotion.
+   */
+  repoLinked?: boolean
   /** Last `repoHeadSha` the guest reported; export when it changes. */
   repoHeadSha?: string
   /** First consecutive `/pool/activity` failure (undefined while polls succeed). */
@@ -737,6 +756,8 @@ export class MetalWarmPool {
         dataUntrustedReason: e.dataUntrustedReason,
         repoParentEtag: e.repoParentEtag,
         repoUntrustedReason: e.repoUntrustedReason,
+        stateSince: e.stateSince ?? e.assignedAt,
+        repoLinked: e.repoLinked,
         lastHealthOk: healthy,
       })
       adoptedIds.add(e.vmId)
@@ -792,6 +813,8 @@ export class MetalWarmPool {
       dataUntrustedReason: a.dataUntrustedReason,
       repoParentEtag: a.repoParentEtag,
       repoUntrustedReason: a.repoUntrustedReason,
+      stateSince: a.stateSince,
+      repoLinked: a.repoLinked,
       v: 1,
     })
   }
@@ -1089,6 +1112,8 @@ export class MetalWarmPool {
       projectId,
       handle: vm.handle,
       assignedAt: now,
+      stateSince: now,
+      repoHydratePending: true,
       lastTouchedAt: now,
       lastRealActivityAt: now,
       runtimeToken: env.RUNTIME_AUTH_SECRET,
@@ -1182,14 +1207,15 @@ export class MetalWarmPool {
     // creds), so the host hydrates it here — after source, before the guest
     // starts serving chat. A failed overlay must not later overwrite the
     // durable archive with the template seed `.git`.
+    //
+    // Workspace runtimes too: their merged root is one repo that commits every
+    // member's files each turn and is exported under the runtime key. Skipping
+    // the hydrate leaves the replacement VM create-only against an archive
+    // that already exists, so every later export is refused as a conflict.
     try {
-      const r = projectId.startsWith('ws:')
-        ? { hydrated: false as const }
-        : await this.hydrateRepo(projectId, vm.handle, env)
-      if (r.hydrated) {
-        a.repoParentEtag = r.parentEtag
-        this.writeLive(a)
-      }
+      const r = await this.hydrateRepo(projectId, vm.handle, env)
+      if (r.hydrated) a.repoParentEtag = r.parentEtag
+      a.repoLinked = true
     } catch (err: any) {
       const reason = `repo hydrate failed at assign (${err?.message ?? err})`
       this.distrustRepo(a, reason)
@@ -1198,6 +1224,10 @@ export class MetalWarmPool {
           `.git. This VM is marked UNTRUSTED for repo.git.tar.gz and will NOT overwrite it:`,
         err?.message ?? err,
       )
+    } finally {
+      a.repoHydratePending = false
+      a.repoHeadSha = undefined
+      this.writeLive(a)
     }
 
     // Server-backed published VM: overlay the live site's writable state
@@ -1670,6 +1700,7 @@ export class MetalWarmPool {
   }
 
   private async saveRepoInner(a: AssignedVm): Promise<boolean> {
+    if (a.repoHydratePending) return false
     const lineage = this.repoLineageOf(a)
     if (lineage.kind === 'untrusted') {
       metrics.inc(M.repoRefused)
@@ -1700,6 +1731,7 @@ export class MetalWarmPool {
         )
         return 'written'
       case 'conflict':
+        if (!a.repoParentEtag && !a.repoLinked && (await this.promoteUnlinkedRepo(a, bytes))) return 'written'
         metrics.inc(M.repoConflict)
         console.error(
           `[pool] REFUSED to overwrite repo.git.tar.gz for ${a.projectId} — lineage ` +
@@ -1719,6 +1751,51 @@ export class MetalWarmPool {
         return 'lost'
     }
     return 'lost'
+  }
+
+  /**
+   * A create-only VM whose export hit an existing durable repo. That repo is
+   * only stale (not someone else's live work) when nothing wrote it after this
+   * VM's workspace became its own — the case for workspace runtimes that ran
+   * before they hydrated `.git`, whose exports were otherwise refused forever.
+   * Then this VM's `.git` supersedes it, with the old archive kept under
+   * `conflict/`. Any later write means another VM is live and the conflict
+   * stands.
+   */
+  private async promoteUnlinkedRepo(a: AssignedVm, bytes: Uint8Array): Promise<boolean> {
+    const since = a.stateSince ?? a.assignedAt
+    let current: { etag: string | null; lastModified: number | null } | null
+    try {
+      current = await this.statDurableRepo(a.projectId)
+    } catch {
+      return false
+    }
+    if (!current?.etag || current.lastModified === null || current.lastModified >= since) return false
+
+    const preservedKey = await this.preserveDurableRepo(a.projectId).catch(() => null)
+    if (!preservedKey) return false
+    const outcome = await this.uploadRepoGuarded(a.projectId, bytes, {
+      lineage: { kind: 'descends', etag: current.etag },
+    })
+    if (outcome.status !== 'written' && outcome.status !== 'created') return false
+
+    metrics.inc(M.repoPromoted)
+    a.repoParentEtag = outcome.etag ?? current.etag
+    this.writeLive(a)
+    console.log(
+      `[pool] promoted unlinked repo for ${a.projectId} over etag=${current.etag} ` +
+        `(last written ${new Date(current.lastModified).toISOString()}, before this VM's state began ` +
+        `${new Date(since).toISOString()}); previous archive kept at ${preservedKey}`,
+    )
+    return true
+  }
+
+  protected statDurableRepo(projectId: string): Promise<{ etag: string | null; lastModified: number | null } | null> {
+    return statRepoArchive(projectId, this.cfg)
+  }
+
+  protected preserveDurableRepo(projectId: string): Promise<string | null> {
+    return preserveRepoArchive(projectId, this.cfg)
   }
 
   private async hydrateRepo(
@@ -2435,6 +2512,7 @@ export class MetalWarmPool {
       // descends from this archive — so its next export may overwrite it.
       dataParentEtag: s.dataEtag,
       repoParentEtag: s.repoEtag,
+      stateSince: s.suspendedAt,
     }
     this.assigned.set(projectId, a)
     this.writeLive(a)

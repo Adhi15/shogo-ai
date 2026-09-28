@@ -19,6 +19,7 @@ import { tmpdir } from 'os'
 import { emitLogToSink } from '@shogo-ai/sdk/logger'
 import { sanitizeRuntimeLineForSignoz } from './signoz-safe-log'
 import { getStreamFinishReason } from './stream-finish'
+import { shouldFlushGitBeforeExport } from './git-export-policy'
 import {
   existsSync,
   readFileSync,
@@ -1905,7 +1906,8 @@ app.post('/agent/chat', async (c) => {
       // Periodic seq heartbeat. The client uses this to know how many
       // buffered chunks it has already received so it can resume with
       // `?fromSeq=N` on a premature disconnect without re-rendering text
-      // it has already seen.
+      // it has already seen. Transient: the AI SDK would otherwise append
+      // a message part every 250ms for the whole turn.
       const seqHeartbeat = setInterval(() => {
         const seq = bufWriter.lastSeq
         if (seq <= 0) return
@@ -1913,6 +1915,7 @@ app.post('/agent/chat', async (c) => {
           writer.write({
             type: 'data-turn-seq',
             data: { turnId, seq },
+            transient: true,
           } as any)
         } catch {
           clearInterval(seqHeartbeat)
@@ -3039,6 +3042,9 @@ const EXPORT_FLUSH_TIMEOUT_MS = 20_000
  */
 async function flushGitBeforeExport(dir: string): Promise<void> {
   if (!gitSyncInstance || dir !== WORKSPACE_DIR) return
+  // Mid-turn edits are committed at turn-complete; committing here would
+  // create a checkpoint for each tool call during a host-driven export.
+  if (!shouldFlushGitBeforeExport(activeStreams)) return
   const sync = gitSyncInstance
   let timer: ReturnType<typeof setTimeout> | undefined
   try {

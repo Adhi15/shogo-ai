@@ -88,6 +88,10 @@ export interface LiveVmEntry {
   repoParentEtag?: string
   /** Sticky: repo hydrate failed. Must survive adopt so we never launder it. */
   repoUntrustedReason?: string
+  /** See AssignedVm.stateSince. */
+  stateSince?: number
+  /** See AssignedVm.repoLinked. */
+  repoLinked?: boolean
   v: 1
 }
 

@@ -102,7 +102,7 @@ import { FileStateCache } from './file-state-cache'
 import { SUBAGENT_GUIDE, WORKTREE_GUIDE } from './subagent-prompts'
 import { buildGuideRegistry, buildCapabilitiesIndex } from './guide-registry'
 import { AgentManager } from './agent-manager'
-import { loadCustomAgents } from './subagent'
+import { loadWorkspaceCustomAgents } from './subagent'
 import { CommandRegistry } from './command-registry'
 import { releaseSessionBrowsers, reapOrphanChromium } from './browser-pool'
 import { TeamManager } from './team-manager'
@@ -627,6 +627,8 @@ export class AgentGateway {
   private _lastTool: string | null = null
   /** Dynamic sub-agent registry and lifecycle manager */
   public agentManager = new AgentManager()
+  /** Signature of the last `.shogo/agents/` set registered, to log only on change. */
+  private customAgentsSignature = ''
   private teamManager?: TeamManager
   /** Per-session shell cwd tracking — persists cd across exec calls */
   private shellCwd = new Map<string, string>()
@@ -913,6 +915,40 @@ export class AgentGateway {
     return { ...defaults, gitWorktreesEnabled: worktreesEnvDefault }
   }
 
+  /**
+   * Register `.shogo/agents/*.md` types from the workspace root and, in a
+   * workspace runtime, from every attached project. Idempotent; cheap enough
+   * to run per turn.
+   */
+  syncCustomAgents(): void {
+    try {
+      const memberIds = isWorkspaceRuntimeMode() ? workspaceAttachedProjectIds() : []
+      const customAgents = loadWorkspaceCustomAgents(this.workspaceDir, memberIds)
+      const failed: string[] = []
+      for (const def of customAgents) {
+        const result = this.agentManager.register({
+          name: def.name,
+          description: def.description,
+          systemPrompt: def.systemPrompt,
+          toolNames: def.tools,
+          disallowedTools: def.disallowedTools,
+          model: def.model,
+          maxTurns: def.maxTurns,
+        })
+        if (!result.ok) failed.push(`${def.name}: ${result.error}`)
+      }
+      const signature = customAgents.map((a) => a.name).join(',') + '|' + failed.join(',')
+      if (signature === this.customAgentsSignature) return
+      this.customAgentsSignature = signature
+      for (const f of failed) console.warn(`[AgentGateway] Failed to register custom agent type ${f}`)
+      if (customAgents.length > 0) {
+        console.log(`[AgentGateway] Loaded ${customAgents.length} custom agent type(s) from .shogo/agents/: ${customAgents.map(a => a.name).join(', ')}`)
+      }
+    } catch (err: any) {
+      console.warn(`[AgentGateway] Failed to load custom agent types: ${err?.message ?? err}`)
+    }
+  }
+
   async start(): Promise<void> {
     if (this.running) {
       console.warn('[AgentGateway] start() called but gateway is already running — skipping')
@@ -1016,28 +1052,7 @@ export class AgentGateway {
     // these come from disk and should reflect the current file content on
     // every boot, not fork into a separate DB-persisted copy that can drift
     // from it.
-    try {
-      const customAgents = loadCustomAgents(this.workspaceDir)
-      for (const def of customAgents) {
-        const result = this.agentManager.register({
-          name: def.name,
-          description: def.description,
-          systemPrompt: def.systemPrompt,
-          toolNames: def.tools,
-          disallowedTools: def.disallowedTools,
-          model: def.model,
-          maxTurns: def.maxTurns,
-        })
-        if (!result.ok) {
-          console.warn(`[AgentGateway] Failed to register custom agent type "${def.name}": ${result.error}`)
-        }
-      }
-      if (customAgents.length > 0) {
-        console.log(`[AgentGateway] Loaded ${customAgents.length} custom agent type(s) from .shogo/agents/: ${customAgents.map(a => a.name).join(', ')}`)
-      }
-    } catch (err: any) {
-      console.warn(`[AgentGateway] Failed to load custom agent types: ${err?.message ?? err}`)
-    }
+    this.syncCustomAgents()
 
     // Phase 2.1 — forward sub-agent cost metrics (with quality signals) to the
     // API server. Without this wiring the AgentManager's emitCostMetric()
@@ -2571,6 +2586,8 @@ export class AgentGateway {
         console.warn(`${this.logPrefix} Failed to emit team snapshot:`, err.message)
       }
     }
+    // Pick up `.shogo/agents/` edits and newly mounted projects without a restart.
+    this.syncCustomAgents()
     if (uiWriter && this.agentManager) {
       try {
         const types = this.agentManager.listTypes()
@@ -2653,16 +2670,20 @@ export class AgentGateway {
     // Stream live process-list updates to the UI for the duration of this turn.
     // The registry persists across turns; this subscription is per-turn so it
     // is torn down when the stream closes.
+    //
+    // Status frames below (process list, context usage, connectivity wait,
+    // tool progress) are `transient`: the client consumes them in `onData`,
+    // and the AI SDK would otherwise append each one to `message.parts`.
     let unsubscribeProcesses: (() => void) | undefined
     if (uiWriter && sessionId) {
       const reg = this.getOrCreateCommandRegistry(sessionId)
       // Push the current list immediately so a reconnecting client re-syncs.
       try {
-        uiWriter.write({ type: 'data-process-update', data: { processes: reg.listRunning() } } as any)
+        uiWriter.write({ type: 'data-process-update', data: { processes: reg.listRunning() }, transient: true } as any)
       } catch { /* writer may already be closed */ }
       unsubscribeProcesses = reg.onChange((processes) => {
         try {
-          uiWriter.write({ type: 'data-process-update', data: { processes } } as any)
+          uiWriter.write({ type: 'data-process-update', data: { processes }, transient: true } as any)
         } catch { /* writer closed — onChange teardown happens in finally */ }
       })
     }
@@ -2684,6 +2705,7 @@ export class AgentGateway {
           uiWriter.write({
             type: 'data-context-usage',
             data: { inputTokens: runningContextEstimate, contextWindowTokens },
+            transient: true,
           } as any)
         }
       }
@@ -2694,6 +2716,7 @@ export class AgentGateway {
         uiWriter.write({
           type: 'data-context-usage',
           data: { inputTokens: runningContextEstimate, contextWindowTokens },
+          transient: true,
         } as any)
       }
 
@@ -3196,6 +3219,7 @@ export class AgentGateway {
                 elapsedMs: info.elapsedMs,
                 nextProbeInMs: info.nextProbeInMs,
               },
+              transient: true,
             } as any)
           }
           console.warn(
@@ -3213,6 +3237,7 @@ export class AgentGateway {
             uiWriter.write({
               type: 'data-connectivity-wait',
               data: { state: 'reconnected' },
+              transient: true,
             } as any)
           }
           console.warn(`${this.logPrefix} Connectivity restored — resuming turn for session ${sessionId}`)
@@ -3258,6 +3283,7 @@ export class AgentGateway {
                     elapsedMs: Date.now() - startedAt,
                     status: 'running',
                   },
+                  transient: true,
                 } as any)
               } catch {
                 clearInterval(timer)
@@ -3507,6 +3533,7 @@ export class AgentGateway {
         uiWriter.write({
           type: 'data-context-usage',
           data: { inputTokens: runningContextEstimate, contextWindowTokens },
+          transient: true,
         } as any)
       }
 
