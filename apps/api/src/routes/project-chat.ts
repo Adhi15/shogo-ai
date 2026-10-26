@@ -1350,7 +1350,6 @@ export function projectChatRoutes(config: ProjectChatRoutesConfig) {
           const hydratedBody = await inlineChatBodyAttachments(parsedBody)
           if (hydratedBody !== parsedBody) {
             parsedBody = hydratedBody
-            body = JSON.stringify(parsedBody)
           }
         } catch (error: any) {
           console.error('[ProjectChat] Failed to load chat attachment:', error?.message || error)
@@ -1457,7 +1456,6 @@ export function projectChatRoutes(config: ProjectChatRoutesConfig) {
         // model route to its native provider instead of being inferred as
         // `custom` by the runtime.
         stampModelProvider(parsedBody)
-        body = JSON.stringify(parsedBody)
       }
       if (bodyIsJson && parsedBody && typeof parsedBody === 'object') {
         await stampWorkspacePlan(parsedBody, project.workspaceId)
@@ -1465,7 +1463,6 @@ export function projectChatRoutes(config: ProjectChatRoutesConfig) {
         // `Project.settings`, never from the workspace agent's. The runtime
         // serves both surfaces, so it has to be told which this is.
         parsedBody.chatContext = 'project'
-        body = JSON.stringify(parsedBody)
       }
 
 
@@ -1513,7 +1510,6 @@ export function projectChatRoutes(config: ProjectChatRoutesConfig) {
           project.workspaceId,
         )
         if (wsChanged || projectRefs.changed || historyChanged) {
-          body = JSON.stringify(parsedBody)
         }
       }
 
@@ -1561,7 +1557,6 @@ export function projectChatRoutes(config: ProjectChatRoutesConfig) {
         ).catch(() => null)
         if (seed) {
           parsedBody.historySeed = seed
-          body = JSON.stringify(parsedBody)
         }
       }
 
@@ -1763,6 +1758,11 @@ export function projectChatRoutes(config: ProjectChatRoutesConfig) {
       const fetchSignal = c.req.header('X-Agent-Task-Id')
         ? AbortSignal.any([clientSignal, fetchTimeoutSignal])
         : fetchTimeoutSignal
+
+      // Serialise once, after every mutation above (SHO-213). Each step used to
+      // re-stringify the whole body, which multiplied a 15 MB base64 attachment
+      // into six copies before the upstream fetch ever started.
+      if (bodyIsJson) body = JSON.stringify(parsedBody)
 
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         // Check if client already disconnected before retrying

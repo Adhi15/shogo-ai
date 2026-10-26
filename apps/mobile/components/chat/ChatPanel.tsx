@@ -166,6 +166,12 @@ import { useBillingData } from "@shogo/shared-app/hooks"
 import { API_URL, api, createHttpClient } from "../../lib/api"
 import { workspaceHttp } from "../../lib/workspace-http"
 import { agentProxyBase } from "../../lib/agent-proxy-base"
+import {
+  prepareOutgoingFiles,
+  shouldUploadAttachmentFirst,
+  type OutgoingFilePart,
+} from "../../lib/chat-attachment-upload"
+import { releasePreviewUrl } from "../../lib/composer-attachments"
 import { usePlatformConfig } from "../../lib/platform-config"
 import { workspaceProjectFilter } from "../../lib/project-load"
 import {
@@ -3647,6 +3653,12 @@ const ChatPanelContent = observer(function ChatPanelContent({
   const [emptyResponseError, setEmptyResponseError] = useState<string | null>(
     null,
   )
+  // Non-null while an attachment's bytes are going up, so a 200 MB file shows
+  // movement instead of a frozen composer (the chips are cleared on submit).
+  const [uploadStatus, setUploadStatus] = useState<{
+    name: string
+    fraction: number
+  } | null>(null)
   const [errorBannerExpanded, setErrorBannerExpanded] = useState(false)
   const [errorDismissed, setErrorDismissed] = useState(false)
   const [tunnelReconnecting, setTunnelReconnecting] = useState(false)
@@ -3830,6 +3842,18 @@ const ChatPanelContent = observer(function ChatPanelContent({
       setOptimisticUserInput(null)
     }
   }, [currentSessionId, messagesWithQueued, optimisticUserInput])
+
+  // A big web pick paints its echo from a `blob:` object URL, and the real
+  // message carries a workspace URL instead — so once this echo is replaced or
+  // dropped, nothing can reach that blob again and it is released here. The
+  // composer deliberately keeps its own copy alive through the send (see
+  // `resetAttachments`), so the release belongs to the echo's lifetime.
+  useEffect(() => {
+    const files = optimisticUserInput?.files ?? []
+    return () => {
+      for (const file of files) releasePreviewUrl(file.previewUrl)
+    }
+  }, [optimisticUserInput])
 
   const displayMessages = useMemo((): UIMessage[] => {
     // While the stop snapshot is held, the window still shows it — merged with
@@ -5707,7 +5731,6 @@ const ChatPanelContent = observer(function ChatPanelContent({
     const match = dataUrl.match(/^data:([^;]+);/)
     return match?.[1] || "application/octet-stream"
   }, [])
-
   // Internal function that actually sends a message (used by queue processor)
   // Isolated "actually put it on the wire" step, factored out of
   // `sendMessageInternal` so a network-class failure can be queued for
@@ -5830,25 +5853,55 @@ const ChatPanelContent = observer(function ChatPanelContent({
       setIsFollowing(true)
       showOptimisticEcho(trimmedContent, fileArray)
 
+      // The turn is in flight from here: the upload below is the first thing
+      // that can take real time on a big attachment, and the composer must
+      // already be locked and the transcript already painting the bubble
+      // (QA round 1 on SHO-213: it looked frozen for the whole upload).
+      isSendingMessageRef.current = true
+
+      // Seed the progress row before the first byte moves: a transport that
+      // reports no intermediate events (a small file, a fast link) would
+      // otherwise leave the composer looking idle for the whole upload.
+      const uploading = fileArray.find(
+        (file) => !file.savedPath && shouldUploadAttachmentFirst(file),
+      )
+      if (uploading) setUploadStatus({ name: uploading.name, fraction: 0 })
+
+      // Attachments go up BEFORE the turn. The bytes are PUT to the runtime's
+      // streaming route and the message carries a reference part (`savedPath`),
+      // so a large archive never becomes a base64 JSON body — that inflation,
+      // repeated through the client, the API and the runtime, is what made big
+      // attachments time out (SHO-213). Small images stay inline: vision needs
+      // their bytes on this very request.
+      let outgoingParts: OutgoingFilePart[] = []
+      try {
+        outgoingParts = await prepareOutgoingFiles(fileArray, {
+          agentUrl: agentBaseUrl,
+          headers: nativeHeaders ? nativeHeaders() : undefined,
+          fetchImpl: expoFetch ?? undefined,
+          onUploadProgress: (name, fraction) => setUploadStatus({ name, fraction }),
+        })
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Could not upload the attachment."
+        console.warn("[ChatPanel] Attachment upload failed:", err)
+        isSendingMessageRef.current = false
+        setEmptyResponseError(message)
+        return
+      } finally {
+        setUploadStatus(null)
+      }
+
       const parts: Array<
         | { type: "text"; text: string }
-        | { type: "file"; mediaType: string; url: string; name?: string }
+        | OutgoingFilePart
       > = []
 
       if (trimmedContent) {
         parts.push({ type: "text", text: trimmedContent })
       }
 
-      fileArray.forEach((file) => {
-        parts.push({
-          type: "file",
-          mediaType: file.type || extractMediaType(file.dataUrl),
-          url: file.dataUrl,
-          ...(file.name ? { name: file.name } : {}),
-        })
-      })
-
-      isSendingMessageRef.current = true
+      parts.push(...outgoingParts)
 
       // Let EZ Mode know a new turn is starting. This is what
       // triggers the overlay to arm its heartbeat / activity buffer.
@@ -5926,13 +5979,8 @@ const ChatPanelContent = observer(function ChatPanelContent({
         }
       }
 
-      if (fileArray.length > 0) {
-        messagePayload.files = fileArray.map((file) => ({
-          type: "file" as const,
-          mediaType: file.type || extractMediaType(file.dataUrl),
-          url: file.dataUrl,
-          ...(file.name ? { name: file.name } : {}),
-        }))
+      if (outgoingParts.length > 0) {
+        messagePayload.files = outgoingParts
       }
 
       try {
@@ -6008,7 +6056,9 @@ const ChatPanelContent = observer(function ChatPanelContent({
       deliverMessage,
       featureId,
       phase,
-      extractMediaType,
+      agentBaseUrl,
+      nativeHeaders,
+      expoFetch,
       workspaceId,
       userId,
       projectId,
@@ -7033,6 +7083,7 @@ const ChatPanelContent = observer(function ChatPanelContent({
       dataUrl: p.url,
       name: p.name ?? p.filename ?? "file",
       type: p.mediaType ?? extractMediaType(p.url),
+      ...(typeof p.savedPath === "string" ? { savedPath: p.savedPath } : {}),
     }))
     const files: FileAttachment[] | undefined =
       cachedFiles && cachedFiles.length > 0
@@ -7367,6 +7418,7 @@ const ChatPanelContent = observer(function ChatPanelContent({
               dataUrl: p.url,
               name: p.name ?? p.filename ?? "file",
               type: p.mediaType ?? extractMediaType(p.url),
+              ...(typeof p.savedPath === "string" ? { savedPath: p.savedPath } : {}),
             }))
           : undefined
       if (!content && !files) return
@@ -8854,6 +8906,7 @@ const ChatPanelContent = observer(function ChatPanelContent({
                   <ExecutionBadge />
                   <ChatInput
                     onSubmit={handleInputSubmit}
+                    uploadStatus={uploadStatus}
                     disabled={!currentSessionId || !!readOnlyReason || machineView.composeDisabled}
                     placeholder={
                       readOnlyReason ?? machineStop
