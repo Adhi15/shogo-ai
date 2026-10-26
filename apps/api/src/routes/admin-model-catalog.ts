@@ -282,6 +282,7 @@ function inferFamily(provider: string, id: string): string {
     return 'other'
   }
   if (provider === 'openai') return 'gpt'
+  if (provider === 'google') return 'gemini'
   return 'other'
 }
 
