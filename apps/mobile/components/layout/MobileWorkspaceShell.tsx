@@ -208,7 +208,6 @@ export function MobileWorkspaceShell({ children, enabled = true }: MobileWorkspa
   const sessionsOpenRef = useRef(sessionsOpen);
   const showChatChromeRef = useRef(showChatChrome);
   const openSessionsRef = useRef<() => void>(() => {});
-  const closeSessionsRef = useRef<() => void>(() => {});
   sessionsOpenRef.current = sessionsOpen;
   showChatChromeRef.current = showChatChrome;
 
@@ -289,7 +288,6 @@ export function MobileWorkspaceShell({ children, enabled = true }: MobileWorkspa
     []
   );
   openSessionsRef.current = openSessions;
-  closeSessionsRef.current = closeSessions;
 
   // Project detail uses NativePhoneHeader, whose menu button emits this
   // existing event. The legacy app drawer intentionally ignores it while this
