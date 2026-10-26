@@ -437,7 +437,9 @@ export function MobileBottomNav() {
           // safe area. Reserve the inset here so the composer and this
           // capsule move up together and match the project-chat dock position.
           paddingBottom:
-            isHomePath(pathname) || chrome.overlay ? insets.bottom + 8 : 8,
+            isHomePath(pathname) || chrome.overlay || chrome.edgeToEdge
+              ? insets.bottom + 8
+              : 8,
           paddingHorizontal: navColumn.gutter,
         }}
         testID="mobile-bottom-nav"

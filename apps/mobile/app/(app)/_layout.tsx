@@ -115,11 +115,17 @@ const PHONE_TAB_ROUTES = new Set([
   "activity",
   "tasks",
   "canvases",
+  // The team dock's tabs.
+  "home",
+  "more",
 ]);
+
+/** Full route names that are tabs although their first segment also holds drill-downs. */
+const PHONE_TAB_SCREENS = new Set(["c/dms"]);
 
 const phoneStackScreenOptions = ({ route }: { route: { name: string } }) => ({
   ...PHONE_STACK_SCREEN_OPTIONS,
-  animation: PHONE_TAB_ROUTES.has(route.name.split("/")[0])
+  animation: PHONE_TAB_SCREENS.has(route.name) || PHONE_TAB_ROUTES.has(route.name.split("/")[0])
     ? ("fade" as const)
     : PHONE_STACK_SCREEN_OPTIONS.animation,
 });
@@ -247,6 +253,7 @@ function AppLayoutInner() {
     pathname === "/project-chats" || pathname === "/(app)/project-chats";
   const isAIModelsPage =
     pathname === "/ai-models" || pathname === "/(app)/ai-models";
+  const isMeetingsPage = /\/meetings\/?$/.test(pathname);
   const isNonChatWorkspacePage = [
     "/tasks",
     "/activity",
@@ -542,6 +549,7 @@ function AppLayoutInner() {
       !isIdeEmbed &&
       (isHomePage ||
         isTeamTabScreen ||
+        isMeetingsPage ||
         isSearchPage ||
         isAccountPage ||
         isNotificationsPage ||

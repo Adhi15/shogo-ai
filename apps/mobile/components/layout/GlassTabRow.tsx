@@ -23,6 +23,7 @@ import {
   Animated,
   Pressable,
   StyleSheet,
+  Text,
   View,
   type GestureResponderEvent,
   type LayoutChangeEvent,
@@ -47,6 +48,14 @@ export interface GlassTabItem {
   label: string;
   Icon: ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
   onPress: () => void;
+  /** Unread count drawn as a red badge on the icon. */
+  badge?: number;
+  /** A badge-less unread marker, shown only while `badge` is 0. */
+  dot?: boolean;
+}
+
+function badgeLabel(count: number): string {
+  return count > 99 ? "99+" : String(count);
 }
 
 interface GlassTabRowProps {
@@ -403,7 +412,7 @@ export function GlassTabRow({
               <View className="h-6 w-6 rounded-full bg-muted" />
             </View>
           ))
-        : items.map(({ id, label, Icon }, index) => {
+        : items.map(({ id, label, Icon, badge = 0, dot = false }, index) => {
             const selected = selectedIndex === index;
             return (
               <Pressable
@@ -411,7 +420,9 @@ export function GlassTabRow({
                 onPress={() => onItemPress(index)}
                 onLayout={onItemLayout(index)}
                 accessibilityRole="tab"
-                accessibilityLabel={label}
+                accessibilityLabel={
+                  badge ? `${label}, ${badge} unread` : dot ? `${label}, unread` : label
+                }
                 aria-selected={selected}
                 className={cn("flex-1 items-center justify-center rounded-full")}
                 style={{ height: itemHeight }}
@@ -423,6 +434,21 @@ export function GlassTabRow({
                     strokeWidth={selected ? 2.2 : 1.9}
                   />
                 </Animated.View>
+                {badge > 0 ? (
+                  <View
+                    testID="dock-badge"
+                    className="absolute right-3 top-0.5 min-w-[16px] items-center rounded-full bg-destructive px-1"
+                  >
+                    <Text className="text-[10px] font-semibold leading-4 text-white">
+                      {badgeLabel(badge)}
+                    </Text>
+                  </View>
+                ) : dot ? (
+                  <View
+                    testID="dock-dot"
+                    className="absolute right-4 top-1 h-2 w-2 rounded-full bg-destructive"
+                  />
+                ) : null}
               </Pressable>
             );
           })}
