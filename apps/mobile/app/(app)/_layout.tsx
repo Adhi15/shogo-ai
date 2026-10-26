@@ -87,13 +87,14 @@ import { isConversationPath } from "../../lib/sidebar-tab";
 csMark("app:layout:module-load");
 
 /**
- * Phone stack screens draw their own header, and the shell behind them owns the
- * canvas, so a pushed screen must not paint an opaque background over it.
+ * Phone stack screens draw their own header. Each paints the canvas colour
+ * itself: transparent screens let the one underneath show through while a
+ * cross-fade or slide is mid-flight, so a quick burst of taps stacks ghosted
+ * pages on top of each other.
  */
 const PHONE_STACK_SCREEN_OPTIONS = {
   headerShown: false,
   animation: "slide_from_right",
-  contentStyle: { backgroundColor: "transparent" },
 } as const;
 
 /**
@@ -127,8 +128,14 @@ const PHONE_TAB_ROUTES = new Set([
  */
 const PHONE_TAB_SCREENS = new Set(["c/dms", "c/[conversationId]"]);
 
-const phoneStackScreenOptions = ({ route }: { route: { name: string } }) => ({
+const PHONE_TAB_FADE_MS = 140;
+
+const phoneStackScreenOptions = (canvas: string) => ({ route }: { route: { name: string } }) => ({
   ...PHONE_STACK_SCREEN_OPTIONS,
+  contentStyle: { backgroundColor: canvas },
+  // Only read for `fade`: a short dissolve, so a quick run of tab taps never
+  // sits on two half-visible pages.
+  animationDuration: PHONE_TAB_FADE_MS,
   animation:
     // On a phone `/settings` only redirects to `/account`. Sliding it in would
     // show an empty page before the redirect lands, so it appears instantly
@@ -177,6 +184,10 @@ function AppLayoutInner() {
   const isPhone = usePhoneLayout();
   const phoneSheetOpen = useNativePhoneSheetOpen();
   const nativeDrawerCanvas = nativePhoneCanvas(isDark);
+  const stackScreenOptions = useMemo(
+    () => phoneStackScreenOptions(nativeDrawerCanvas),
+    [nativeDrawerCanvas],
+  );
   const isWide = !isNativeApp && width >= WEB_WIDE_MIN_WIDTH;
   // Phones get a real navigator so a screen you go into is pushed over Home and
   // back pops it; desktop and wide web (and tablets) keep the flat Slot.
@@ -628,10 +639,10 @@ function AppLayoutInner() {
           key={activeWorkspace?.id ?? "workspace-loading"}
           enabled={useMobileWorkspaceShell}
         >
-          {phoneStack ? <Stack screenOptions={phoneStackScreenOptions} /> : <Slot />}
+          {phoneStack ? <Stack screenOptions={stackScreenOptions} /> : <Slot />}
         </MobileWorkspaceShell>
       ) : phoneStack ? (
-        <Stack screenOptions={phoneStackScreenOptions} />
+        <Stack screenOptions={stackScreenOptions} />
       ) : (
         <Slot />
       )}
