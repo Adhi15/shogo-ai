@@ -238,7 +238,11 @@ export function MobileBottomNav() {
         },
       } as any);
     } else {
-      router.replace("/(app)" as any);
+      // Return to the Chat screen already in the stack. `replace` would throw
+      // it away and rebuild it, flashing a blank "Loading conversation" screen
+      // and losing the draft and scroll position; `dismissTo` keeps it mounted
+      // and only pushes a new one if Chat isn't underneath yet.
+      router.dismissTo("/(app)" as any);
     }
   };
 
