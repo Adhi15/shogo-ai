@@ -96,6 +96,34 @@ const PHONE_STACK_SCREEN_OPTIONS = {
   contentStyle: { backgroundColor: "transparent" },
 } as const;
 
+/**
+ * Screens the bottom nav switches between. The nav bar is a persistent layer
+ * outside the stack, so sliding a whole page in dims and moves everything
+ * except the strip the nav sits on, leaving a white band along the bottom for
+ * the length of the transition. Peer destinations cross-fade instead, as a tab
+ * bar does; real drill-downs keep the slide.
+ */
+const PHONE_TAB_ROUTES = new Set([
+  // The Chat tab lands on the app index; inside a project, the Chat / Canvas /
+  // Files / Plans tabs switch between these two.
+  "index",
+  "project-chat",
+  "project-surface",
+  "agent",
+  "meetings",
+  "goals",
+  "activity",
+  "tasks",
+  "canvases",
+]);
+
+const phoneStackScreenOptions = ({ route }: { route: { name: string } }) => ({
+  ...PHONE_STACK_SCREEN_OPTIONS,
+  animation: PHONE_TAB_ROUTES.has(route.name.split("/")[0])
+    ? ("fade" as const)
+    : PHONE_STACK_SCREEN_OPTIONS.animation,
+});
+
 function AppLayoutInner() {
   csMark("app:layout:render");
   const { isAuthenticated, isLoading, user, refreshSession } = useAuth();
@@ -582,10 +610,10 @@ function AppLayoutInner() {
           key={activeWorkspace?.id ?? "workspace-loading"}
           enabled={useMobileWorkspaceShell}
         >
-          {phoneStack ? <Stack screenOptions={PHONE_STACK_SCREEN_OPTIONS} /> : <Slot />}
+          {phoneStack ? <Stack screenOptions={phoneStackScreenOptions} /> : <Slot />}
         </MobileWorkspaceShell>
       ) : phoneStack ? (
-        <Stack screenOptions={PHONE_STACK_SCREEN_OPTIONS} />
+        <Stack screenOptions={phoneStackScreenOptions} />
       ) : (
         <Slot />
       )}
