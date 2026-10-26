@@ -21,6 +21,7 @@ import {
   Animated,
   Modal,
   PanResponder,
+  type GestureResponderEvent,
   Platform,
   Pressable,
   ScrollView,
@@ -58,6 +59,14 @@ import {
 } from "../../hooks/usePermissions";
 import { useWorkspaceExperience } from "../../hooks/useWorkspaceExperience";
 import { useReducedMotion } from "../../hooks/useReducedMotion";
+import {
+  drawerProgressFromDelta,
+  drawerReleaseVelocity,
+  drawerSettleTarget,
+  shouldCaptureCloseSwipe,
+  shouldCaptureOpenSwipe,
+} from "../../lib/drawer-drag";
+import { PROGRESS_REST, SPRING } from "../../lib/motion";
 import {
   fetchProjectChatSessions,
   projectChatLabel,
@@ -111,8 +120,6 @@ type ProjectChatState = {
 
 // Drawer rows use 16px text with 6px vertical padding: six whole 36px rows.
 const DRAWER_CHAT_LIST_MAX_HEIGHT = 216;
-const DRAWER_OPEN_SWIPE_DISTANCE = 48;
-const DRAWER_CLOSE_SWIPE_DISTANCE = 48;
 
 export function MobileWorkspaceShell({ children, enabled = true }: MobileWorkspaceShellProps) {
   const router = useRouter();
@@ -205,24 +212,55 @@ export function MobileWorkspaceShell({ children, enabled = true }: MobileWorkspa
   sessionsOpenRef.current = sessionsOpen;
   showChatChromeRef.current = showChatChrome;
 
-  const openSessions = () => {
-    setSessionsOpen(true);
-    requestAnimationFrame(() => {
-      Animated.timing(drawerProgress, {
-        toValue: 1,
-        duration: prefersReducedMotion ? 0 : 220,
-        useNativeDriver: true,
-      }).start();
+  // Springs, not timed eases: a new spring starts from the live value and
+  // inherits the finger's release velocity, so tapping mid-animation or
+  // flicking never stalls or jumps. `onDone` only fires if the spring ran to
+  // the end, so an interrupted close can't unmount a drawer that is reopening.
+  // `settledAtRef` is where the drawer last came to rest and `animatingRef`
+  // says whether a spring is in flight, so a new drag can start from a known
+  // position without waiting on an async read of the native value.
+  const settledAtRef = useRef<0 | 1>(0);
+  const animatingRef = useRef(false);
+  const settleIdRef = useRef(0);
+  const settleDrawer = (toValue: 0 | 1, velocity = 0, onDone?: () => void) => {
+    const id = ++settleIdRef.current;
+    if (prefersReducedMotion) {
+      drawerProgress.stopAnimation();
+      drawerProgress.setValue(toValue);
+      animatingRef.current = false;
+      settledAtRef.current = toValue;
+      onDone?.();
+      return;
+    }
+    animatingRef.current = true;
+    Animated.spring(drawerProgress, {
+      toValue,
+      velocity,
+      ...SPRING.drawer,
+      ...PROGRESS_REST,
+      // The panel is anchored to the screen edge; overshoot would expose a gap.
+      overshootClamping: true,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      // A newer spring owns the value now; leave its bookkeeping alone.
+      if (id !== settleIdRef.current) return;
+      animatingRef.current = false;
+      if (!finished) return;
+      settledAtRef.current = toValue;
+      onDone?.();
     });
   };
+  const settleDrawerRef = useRef(settleDrawer);
+  settleDrawerRef.current = settleDrawer;
+  const drawerWidthRef = useRef(drawerWidth);
+  drawerWidthRef.current = drawerWidth;
 
-  const closeSessions = () => {
-    Animated.timing(drawerProgress, {
-      toValue: 0,
-      duration: prefersReducedMotion ? 0 : 180,
-      useNativeDriver: true,
-    }).start(() => setSessionsOpen(false));
+  const openSessions = () => {
+    setSessionsOpen(true);
+    requestAnimationFrame(() => settleDrawer(1));
   };
+
+  const closeSessions = () => settleDrawer(0, 0, () => setSessionsOpen(false));
   const openWorkspaceSheetAfterDrawerDismissRef = useRef(false);
 
   const openWorkspaceSwitcher = () => {
@@ -268,46 +306,146 @@ export function MobileWorkspaceShell({ children, enabled = true }: MobileWorkspa
 
   // The mobile workspace chrome owns its drawer. Claim only clear,
   // horizontal right-swipes so vertical transcript scrolling remains native.
+  //
+  // While the finger is down the panel and scrim follow it 1:1 (one progress
+  // value drives both). On release a spring carries the finger's velocity to
+  // whichever end it would coast to, so a flick and a slow drag both feel
+  // continuous. `dragStartRef` is the progress when the finger went down, so
+  // grabbing a drawer mid-animation resumes from where it actually was.
+  const dragStartRef = useRef<number | null>(null);
+  const beginDrawerDrag = () => {
+    if (!animatingRef.current) {
+      // At rest: the start is known now, so the very first move tracks.
+      dragStartRef.current = settledAtRef.current;
+      return;
+    }
+    // Grabbed mid-flight: freeze the spring and resume from where it was.
+    // Moves that arrive before the read returns are replayed by the next one
+    // (`dx` is cumulative), so nothing is lost.
+    dragStartRef.current = null;
+    settleIdRef.current += 1;
+    animatingRef.current = false;
+    drawerProgress.stopAnimation((value) => {
+      dragStartRef.current = value;
+    });
+  };
+  const moveDrawerDrag = (dx: number) => {
+    const start = dragStartRef.current;
+    if (start === null) return;
+    drawerProgress.setValue(
+      drawerProgressFromDelta(start, dx, drawerWidthRef.current),
+    );
+  };
+  const endDrawerDrag = (dx: number, vx: number) => {
+    const width = drawerWidthRef.current;
+    const progress = drawerProgressFromDelta(dragStartRef.current ?? 0, dx, width);
+    const velocity = drawerReleaseVelocity(vx, width);
+    dragStartRef.current = null;
+    if (drawerSettleTarget(progress, vx, width) === 1) {
+      settleDrawerRef.current(1, velocity);
+    } else {
+      settleDrawerRef.current(0, velocity, () => setSessionsOpen(false));
+    }
+  };
   const sessionDrawerSwipeHandlers = useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponder: (_event, gesture) =>
+        // Capture phase: a child that already took the touch (a Pressable, a
+        // message bubble) would otherwise never be asked to give it up.
+        onMoveShouldSetPanResponderCapture: (_event, gesture) =>
           showChatChromeRef.current &&
           !sessionsOpenRef.current &&
-          gesture.dx > 8 &&
-          Math.abs(gesture.dx) > Math.abs(gesture.dy),
-        onPanResponderRelease: (_event, gesture) => {
-          if (
-            gesture.dx >= DRAWER_OPEN_SWIPE_DISTANCE ||
-            gesture.vx > 0.45
-          ) {
-            openSessionsRef.current();
-          }
+          shouldCaptureOpenSwipe(gesture.dx, gesture.dy),
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: () => {
+          // Mount the drawer at progress 0 (panel off-screen, scrim clear) so
+          // it exists to be dragged.
+          setSessionsOpen(true);
+          dragEventsRef.current.begin();
         },
+        onPanResponderMove: (_event, gesture) =>
+          dragEventsRef.current.move(gesture.dx),
+        onPanResponderRelease: (_event, gesture) =>
+          dragEventsRef.current.end(gesture.dx, gesture.vx),
+        onPanResponderTerminate: (_event, gesture) =>
+          dragEventsRef.current.end(gesture.dx, gesture.vx),
       }).panHandlers,
     [],
   );
-  const sessionDrawerCloseSwipeHandlers = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_event, gesture) =>
-          sessionsOpenRef.current &&
-          gesture.dx < -8 &&
-          Math.abs(gesture.dx) > Math.abs(gesture.dy),
-        onPanResponderRelease: (_event, gesture) => {
-          if (
-            gesture.dx <= -DRAWER_CLOSE_SWIPE_DISTANCE ||
-            gesture.vx < -0.45
-          ) {
-            closeSessionsRef.current();
-          }
-        },
-      }).panHandlers,
-    [],
-  );
+  // The close drag is tracked from raw touch events instead of a
+  // PanResponder: inside the drawer's Modal the responder negotiation never
+  // offered the touch to a handler on the panel or its container (a child or
+  // the backdrop already held it), but raw touch events always arrive. A
+  // horizontal left drag past the slop starts following the finger; anything
+  // else (a tap, a vertical list scroll) is left to the children.
+  const closeTouchRef = useRef<{
+    x0: number;
+    y0: number;
+    active: boolean;
+    samples: { x: number; t: number }[];
+  } | null>(null);
+  const suppressBackdropPressUntilRef = useRef(0);
+  const sessionDrawerCloseTouchHandlers = {
+    onTouchStart: (event: GestureResponderEvent) => {
+      const { pageX, pageY, timestamp, touches } = event.nativeEvent;
+      closeTouchRef.current =
+        touches.length === 1
+          ? { x0: pageX, y0: pageY, active: false, samples: [{ x: pageX, t: timestamp }] }
+          : null;
+    },
+    onTouchMove: (event: GestureResponderEvent) => {
+      const touch = closeTouchRef.current;
+      if (!touch || !sessionsOpenRef.current) return;
+      const { pageX, pageY, timestamp } = event.nativeEvent;
+      const dx = pageX - touch.x0;
+      const dy = pageY - touch.y0;
+      touch.samples.push({ x: pageX, t: timestamp });
+      if (touch.samples.length > 6) touch.samples.shift();
+      if (!touch.active) {
+        if (!shouldCaptureCloseSwipe(dx, dy)) return;
+        touch.active = true;
+        dragEventsRef.current.begin();
+      }
+      dragEventsRef.current.move(dx);
+    },
+    onTouchEnd: (event: GestureResponderEvent) => {
+      const touch = closeTouchRef.current;
+      closeTouchRef.current = null;
+      if (!touch?.active) return;
+      const first = touch.samples[0];
+      const last = touch.samples[touch.samples.length - 1];
+      const elapsed = last.t - first.t;
+      // px/ms over the last few samples, like PanResponder's `vx`.
+      const vx = elapsed > 0 ? (last.x - first.x) / elapsed : 0;
+      // The same release must not also count as a tap on the backdrop.
+      suppressBackdropPressUntilRef.current = Date.now() + 300;
+      dragEventsRef.current.end(event.nativeEvent.pageX - touch.x0, vx);
+    },
+    onTouchCancel: () => {
+      const touch = closeTouchRef.current;
+      closeTouchRef.current = null;
+      if (!touch?.active) return;
+      suppressBackdropPressUntilRef.current = Date.now() + 300;
+      dragEventsRef.current.end(touch.samples[touch.samples.length - 1].x - touch.x0, 0);
+    },
+  };
+  // The responders are created once, so they reach the latest closures here.
+  const dragEventsRef = useRef({
+    begin: beginDrawerDrag,
+    move: moveDrawerDrag,
+    end: endDrawerDrag,
+  });
+  dragEventsRef.current = {
+    begin: beginDrawerDrag,
+    move: moveDrawerDrag,
+    end: endDrawerDrag,
+  };
 
   useEffect(() => {
     if (showChatChrome) return;
+    settleIdRef.current += 1;
+    animatingRef.current = false;
+    settledAtRef.current = 0;
     drawerProgress.stopAnimation();
     drawerProgress.setValue(0);
     setSessionsOpen(false);
@@ -348,6 +486,9 @@ export function MobileWorkspaceShell({ children, enabled = true }: MobileWorkspa
   const createSideChat = async () => {
     const session = await workspaceChats.createChat();
     if (!session) return;
+    settleIdRef.current += 1;
+    animatingRef.current = false;
+    settledAtRef.current = 0;
     drawerProgress.setValue(0);
     setSessionsOpen(false);
     router.push({
@@ -633,6 +774,7 @@ export function MobileWorkspaceShell({ children, enabled = true }: MobileWorkspa
         <Modal
           visible={sessionsOpen}
           transparent
+          presentationStyle="overFullScreen"
           animationType="none"
           onRequestClose={closeSessions}
           onDismiss={() => {
@@ -641,7 +783,10 @@ export function MobileWorkspaceShell({ children, enabled = true }: MobileWorkspa
             setWorkspaceSheetOpen(true);
           }}
         >
-          <View className="flex-1">
+          {/* Close-swipe tracking sits on this container, above both the
+              backdrop and the panel, so a left swipe anywhere on the overlay
+              closes the drawer. */}
+          <View className="flex-1" {...sessionDrawerCloseTouchHandlers}>
             <Animated.View
               className="absolute inset-0"
               style={{
@@ -655,7 +800,10 @@ export function MobileWorkspaceShell({ children, enabled = true }: MobileWorkspa
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Close chat drawer"
-              onPress={closeSessions}
+              onPress={() => {
+                if (Date.now() < suppressBackdropPressUntilRef.current) return;
+                closeSessions();
+              }}
               // NativeWind's `absolute inset-0` does not apply reliably to
               // this Modal backdrop Pressable.
               style={StyleSheet.absoluteFill}
@@ -663,7 +811,6 @@ export function MobileWorkspaceShell({ children, enabled = true }: MobileWorkspa
             <Animated.View
               accessibilityViewIsModal
               className="z-10 h-full border-r border-border/70"
-              {...sessionDrawerCloseSwipeHandlers}
               style={{
                 width: drawerWidth,
                 height: "100%",
