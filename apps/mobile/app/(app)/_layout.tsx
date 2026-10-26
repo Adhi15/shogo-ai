@@ -120,14 +120,24 @@ const PHONE_TAB_ROUTES = new Set([
   "more",
 ]);
 
-/** Full route names that are tabs although their first segment also holds drill-downs. */
-const PHONE_TAB_SCREENS = new Set(["c/dms"]);
+/**
+ * Full route names that cross-fade although their first segment also holds
+ * real drill-downs: the DMs tab, and a conversation, which is full-bleed with
+ * the dock drawn over it (sliding it leaves a white band where the dock is).
+ */
+const PHONE_TAB_SCREENS = new Set(["c/dms", "c/[conversationId]"]);
 
 const phoneStackScreenOptions = ({ route }: { route: { name: string } }) => ({
   ...PHONE_STACK_SCREEN_OPTIONS,
-  animation: PHONE_TAB_SCREENS.has(route.name) || PHONE_TAB_ROUTES.has(route.name.split("/")[0])
-    ? ("fade" as const)
-    : PHONE_STACK_SCREEN_OPTIONS.animation,
+  animation:
+    // On a phone `/settings` only redirects to `/account`. Sliding it in would
+    // show an empty page before the redirect lands, so it appears instantly
+    // and `/account` does the sliding.
+    route.name === "settings"
+      ? ("none" as const)
+      : PHONE_TAB_SCREENS.has(route.name) || PHONE_TAB_ROUTES.has(route.name.split("/")[0])
+        ? ("fade" as const)
+        : PHONE_STACK_SCREEN_OPTIONS.animation,
 });
 
 function AppLayoutInner() {

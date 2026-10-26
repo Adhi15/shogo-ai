@@ -234,14 +234,19 @@ export function ActivityFeed({ compact = false, withFloatingCreate = false }: Ac
             // Phones keep the right corner for the floating "+".
             compact
               ? 'absolute bottom-4 right-4'
-              // The "+" is 56pt tall and 28pt up; centre this ~34pt chip on it.
+              // Sized and centred on the floating "+" (see style below).
               : withFloatingCreate
                 ? 'absolute left-4'
                 : 'absolute bottom-7 left-4',
             'rounded-full border px-4 py-2 shadow-sm',
             unreadOnly ? 'border-primary bg-primary' : 'border-border bg-card active:bg-accent/50',
           )}
-          style={withFloatingCreate && !compact ? { bottom: 39 } : undefined}
+          style={
+            withFloatingCreate && !compact
+              // 40pt tall, centred on the 56pt "+" (measured: this container ends ~4pt above its).
+              ? { bottom: 32, height: 40, justifyContent: 'center', paddingVertical: 0, paddingHorizontal: 18 }
+              : undefined
+          }
         >
           <Text className={cn('text-xs font-medium', unreadOnly ? 'text-primary-foreground' : 'text-foreground')}>Unreads</Text>
         </Pressable>
