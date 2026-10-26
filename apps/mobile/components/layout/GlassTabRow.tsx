@@ -12,6 +12,7 @@
  * PanResponder is never asked to take it over. Taps are left to the buttons;
  * a release that ends a drag suppresses the button press it would also fire.
  */
+import type React from "react";
 import {
   useCallback,
   useEffect,
@@ -27,7 +28,7 @@ import {
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from "react-native";
-import { GlassView } from "expo-glass-effect";
+import { GlassContainer, GlassView } from "expo-glass-effect";
 import { cn } from "@shogo/shared-ui/primitives";
 import { LiquidGlassBackdrop, nativeLiquidGlass } from "../ui/LiquidGlassBackdrop";
 import { useReducedMotion } from "../../hooks/useReducedMotion";
@@ -69,9 +70,19 @@ const ICON = {
 // Light enough that the glass, not the tint, carries the surface: a heavy white
 // tint over a white page reads as a solid pill.
 const PILL_TINT = {
-  dark: "rgba(28,28,30,0.36)",
-  light: "rgba(255,255,255,0.26)",
+  dark: "rgba(28,28,30,0.2)",
+  light: "rgba(255,255,255,0.1)",
 } as const;
+/**
+ * How close glass shapes in the container must be to blend into one another.
+ * The capsule always sits inside the pill, so this only shapes how the two
+ * glass surfaces melt together at the capsule's edge.
+ */
+const GLASS_MERGE_SPACING = 24;
+/** Drag speed (px/s) at which the capsule is stretched to its limit. */
+const STRETCH_FULL_SPEED = 2600;
+/** Extra width the capsule gains at full stretch (0.3 = 30%). */
+const STRETCH_AMOUNT = 0.3;
 const CAPSULE_TINT = {
   dark: "rgba(240,144,80,0.32)",
   light: "rgba(226,121,39,0.22)",
@@ -109,6 +120,8 @@ export function GlassTabRow({
 
   const capsuleX = useRef(new Animated.Value(0)).current;
   const lift = useRef(new Animated.Value(0)).current;
+  // 0..1: how much the capsule is stretched along its travel, from drag speed.
+  const stretch = useRef(new Animated.Value(0)).current;
   const placed = useRef(false);
 
   const activeIndex = items.findIndex((item) => item.id === active);
@@ -218,6 +231,13 @@ export function GlassTabRow({
     }
     const fingerX = pageX - originX.current;
     capsuleX.setValue(capsuleXForFinger(fingerX, slotsRef.current));
+    if (!reducedMotion && state.samples.length > 1) {
+      const a = state.samples[0];
+      const b = state.samples[state.samples.length - 1];
+      const dt = b.t - a.t;
+      const speed = dt > 0 ? (Math.abs(b.x - a.x) / dt) * 1000 : 0;
+      stretch.setValue(Math.min(1, speed / STRETCH_FULL_SPEED));
+    }
     const index = tabIndexAtX(fingerX, slotsRef.current);
     if (index !== hoveredRef.current) {
       hoveredRef.current = index;
@@ -230,6 +250,13 @@ export function GlassTabRow({
     const state = touch.current;
     touch.current = null;
     liftTo(0);
+    if (!reducedMotion) {
+      Animated.spring(stretch, {
+        toValue: 0,
+        ...SPRING.bouncy,
+        useNativeDriver: true,
+      }).start();
+    }
     if (!state?.dragging) return;
     const first = state.samples[0];
     const last = state.samples[state.samples.length - 1];
@@ -278,7 +305,7 @@ export function GlassTabRow({
       onTouchMove={onTouchMove}
       onTouchEnd={() => endTouch(false)}
       onTouchCancel={() => endTouch(true)}
-      className="w-full flex-row items-center gap-1 overflow-hidden bg-transparent px-1.5 shadow-sm"
+      className="w-full flex-row items-center gap-1 bg-transparent px-1.5 shadow-sm"
       style={{
         height,
         maxWidth,
@@ -286,40 +313,51 @@ export function GlassTabRow({
         borderRadius: height / 2,
       }}
     >
-      <LiquidGlassBackdrop
-        tintColor={PILL_TINT[scheme]}
-        style={{ borderRadius: height / 2 }}
-      />
-      {showCapsule ? (
-        <Animated.View
-          pointerEvents="none"
-          style={{
-            position: "absolute",
-            top: itemInset,
-            left: 0,
-            width: capsuleWidth,
-            height: itemHeight,
-            borderRadius: capsuleRadius,
-            overflow: "hidden",
-            transform: [
-              { translateX: capsuleX },
-              { scale: lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) },
-            ],
-          }}
-        >
-          {nativeLiquidGlass() ? (
-            <GlassView
-              isInteractive
-              glassEffectStyle="regular"
-              colorScheme={scheme}
-              tintColor={CAPSULE_TINT[scheme]}
-              style={StyleSheet.absoluteFill}
-            />
-          ) : (
-            <View className="flex-1 rounded-full bg-primary/10" />
-          )}
-        </Animated.View>
-      ) : null}
+      <GlassLayer native={nativeLiquidGlass()}>
+        <LiquidGlassBackdrop
+          glassStyle="regular"
+          tintColor={PILL_TINT[scheme]}
+          style={{ borderRadius: height / 2 }}
+        />
+        {showCapsule ? (
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              top: itemInset,
+              left: 0,
+              width: capsuleWidth,
+              height: itemHeight,
+              borderRadius: capsuleRadius,
+              transform: [
+                { translateX: capsuleX },
+                {
+                  scaleX: stretch.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [1, 1 + STRETCH_AMOUNT],
+                  }),
+                },
+                { scale: lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) },
+              ],
+            }}
+          >
+            {nativeLiquidGlass() ? (
+              <GlassView
+                isInteractive
+                glassEffectStyle="regular"
+                colorScheme={scheme}
+                tintColor={CAPSULE_TINT[scheme]}
+                style={[StyleSheet.absoluteFill, { borderRadius: capsuleRadius }]}
+              />
+            ) : (
+              <View
+                className="flex-1 rounded-full bg-primary/10"
+                style={{ borderRadius: capsuleRadius }}
+              />
+            )}
+          </Animated.View>
+        ) : null}
+      </GlassLayer>
       {loading
         ? Array.from({ length: 4 }, (_, index) => (
             <View
@@ -351,6 +389,31 @@ export function GlassTabRow({
               </Pressable>
             );
           })}
+    </View>
+  );
+}
+
+/**
+ * The glass surfaces (pill backdrop and selection capsule), kept below the tab
+ * icons. On iOS 26 they share one `GlassContainer`, so the capsule's glass
+ * blends into the pill's instead of sitting on top of it as a separate sheet.
+ * Elsewhere it is just a pass-through layer.
+ */
+function GlassLayer({ native, children }: { native: boolean; children: React.ReactNode }) {
+  if (native) {
+    return (
+      <GlassContainer
+        pointerEvents="none"
+        spacing={GLASS_MERGE_SPACING}
+        style={StyleSheet.absoluteFill}
+      >
+        {children}
+      </GlassContainer>
+    );
+  }
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {children}
     </View>
   );
 }

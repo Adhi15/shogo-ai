@@ -2346,7 +2346,11 @@ const ChatInputImpl = forwardRef<ChatInputHandle, ChatInputProps>(function ChatI
             useProminentComposer ? prominentExpansion.onPillLayout : undefined
           }
           className={cn(
-            "relative overflow-hidden",
+            // The native glass pill must not clip: `overflow-hidden` cuts off
+            // the glass's rim light and shadow and leaves it looking flat.
+            useProminentComposer && isNative
+              ? "relative"
+              : "relative overflow-hidden",
             !useProminentComposer && "border bg-muted/30 rounded-xl",
             !useProminentComposer &&
               (isDragOver

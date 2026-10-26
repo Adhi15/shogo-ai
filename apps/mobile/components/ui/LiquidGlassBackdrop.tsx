@@ -104,9 +104,12 @@ export function GlassBlurTarget({
 export function LiquidGlassBackdrop({
   style,
   tintColor,
+  glassStyle = "regular",
 }: {
   style?: StyleProp<ViewStyle>;
   tintColor?: string;
+  /** iOS 26+: `clear` is more transparent and shows more of the lensing. */
+  glassStyle?: "regular" | "clear";
 }) {
   const isDark = useResolvedTheme() === "dark";
   const insideTarget = useContext(InsideTarget);
@@ -121,7 +124,7 @@ export function LiquidGlassBackdrop({
     return (
       <GlassView
         pointerEvents="none"
-        glassEffectStyle="regular"
+        glassEffectStyle={glassStyle}
         colorScheme={scheme}
         tintColor={tintColor}
         style={[StyleSheet.absoluteFill, style]}
