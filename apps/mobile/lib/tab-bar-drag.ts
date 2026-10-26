@@ -69,3 +69,44 @@ export function settleTabIndex(
 export function isTabDrag(dx: number, dy: number): boolean {
   return Math.abs(dx) > TAB_DRAG_SLOP && Math.abs(dx) > Math.abs(dy)
 }
+
+/**
+ * Lets a navigation run at most once per `gapMs`. A request inside the gap is
+ * held, and only the newest held request runs, when the gap ends. The clock
+ * and timer are injected so it can be tested without waiting.
+ */
+export function createNavigationGate(
+  gapMs: number,
+  now: () => number = Date.now,
+  schedule: (fn: () => void, ms: number) => unknown = setTimeout,
+  unschedule: (handle: unknown) => void = (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+) {
+  let lastAt = -Infinity
+  let pending: (() => void) | null = null
+  let timer: unknown = null
+  return {
+    run(navigate: () => void) {
+      const wait = gapMs - (now() - lastAt)
+      if (wait <= 0) {
+        lastAt = now()
+        navigate()
+        return
+      }
+      pending = navigate
+      if (timer) return
+      timer = schedule(() => {
+        timer = null
+        const next = pending
+        pending = null
+        if (!next) return
+        lastAt = now()
+        next()
+      }, wait)
+    },
+    cancel() {
+      if (timer) unschedule(timer)
+      timer = null
+      pending = null
+    },
+  }
+}

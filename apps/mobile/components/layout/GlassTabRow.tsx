@@ -35,6 +35,7 @@ import { haptics } from "../../lib/haptics";
 import { SPRING } from "../../lib/motion";
 import {
   capsuleXForFinger,
+  createNavigationGate,
   isTabDrag,
   settleTabIndex,
   tabIndexAtX,
@@ -79,6 +80,12 @@ const CAPSULE_TINT = {
 const SAMPLE_COUNT = 6;
 /** How long after a drag ends a button press is ignored. */
 const SUPPRESS_PRESS_MS = 300;
+/**
+ * Minimum gap between navigations, about one screen transition. A tap that
+ * lands mid-transition would overlap a second transition on top of it, and
+ * iOS then falls back to its default dimming (a grey flash across the page).
+ */
+const NAV_GAP_MS = 360;
 
 export function GlassTabRow({
   items,
@@ -119,6 +126,13 @@ export function GlassTabRow({
     samples: { x: number; t: number }[];
   } | null>(null);
   const suppressPressUntil = useRef(0);
+
+  // Navigate at most once per transition. The capsule still moves at once;
+  // only the newest request waits its turn, so a burst of taps ends on the
+  // last tab instead of stacking transitions on top of each other.
+  const navigationGate = useRef(createNavigationGate(NAV_GAP_MS)).current;
+  const runNavigation = navigationGate.run;
+  useEffect(() => navigationGate.cancel, [navigationGate]);
 
   const springCapsuleTo = useCallback(
     (toValue: number, velocity = 0) => {
@@ -231,7 +245,7 @@ export function GlassTabRow({
     // The release that ends a drag must not also press the button under it.
     suppressPressUntil.current = Date.now() + SUPPRESS_PRESS_MS;
     springCapsuleTo(slotsRef.current[target].x, velocity);
-    if (target !== activeIndexRef.current) items[target].onPress();
+    if (target !== activeIndexRef.current) runNavigation(items[target].onPress);
   };
 
   const onItemPress = (index: number) => {
@@ -247,9 +261,9 @@ export function GlassTabRow({
         if (current !== index && current >= 0 && slotsRef.current[current]) {
           springCapsuleTo(slotsRef.current[current].x);
         }
-      }, 700);
+      }, NAV_GAP_MS * 3);
     }
-    items[index].onPress();
+    runNavigation(items[index].onPress);
   };
 
   const showCapsule = ready && (activeIndex >= 0 || hovered !== null);
