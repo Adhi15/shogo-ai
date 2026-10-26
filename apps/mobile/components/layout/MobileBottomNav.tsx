@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Shogo Technologies, Inc.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, View, useWindowDimensions } from "react-native";
+import { Platform, View, useWindowDimensions } from "react-native";
 import {
   useGlobalSearchParams,
   usePathname,
@@ -24,8 +24,7 @@ import { NativePhoneBottomFade } from "../phone/NativePhoneBottomFade";
 import { MobileSettingsSheet } from "./MobileSettingsSheet";
 import { TeamDock } from "./TeamDock";
 import { usePhoneChromeOverlay } from "./PhoneChromeOverlay";
-import { LiquidGlassBackdrop } from "../ui/LiquidGlassBackdrop";
-import { cn } from "@shogo/shared-ui/primitives";
+import { GlassTabRow } from "./GlassTabRow";
 import { useResolvedTheme } from "../../contexts/theme";
 import { useWorkspaceExperience } from "../../hooks/useWorkspaceExperience";
 import {
@@ -454,73 +453,15 @@ export function MobileBottomNav() {
         {teamDock ? (
           <TeamDock maxWidth={navColumn.maxWidth!} />
         ) : (
-        <View
-          className="w-full flex-row items-center gap-1 overflow-hidden bg-transparent px-1.5 shadow-sm"
-          style={{
-            height: NATIVE_PHONE_COMPOSER_PILL_HEIGHT,
-            maxWidth: navColumn.maxWidth,
-            alignSelf: "center",
-            borderRadius: NATIVE_PHONE_COMPOSER_PILL_HEIGHT / 2,
-          }}
-        >
-          <LiquidGlassBackdrop
-            tintColor={
-              isDark ? "rgba(28,28,30,0.42)" : "rgba(255,255,255,0.42)"
-            }
-            style={{
-              borderRadius: NATIVE_PHONE_COMPOSER_PILL_HEIGHT / 2,
-            }}
-          />
-          {!experience.resolved && !projectMode
-            ? Array.from({ length: 4 }, (_, index) => (
-                <View
-                  key={index}
-                  className="flex-1 items-center justify-center"
-                  style={{
-                    height:
-                      NATIVE_PHONE_COMPOSER_PILL_HEIGHT -
-                      NATIVE_PHONE_COMPOSER_PILL_ITEM_INSET * 2,
-                  }}
-                >
-                  <View className="h-6 w-6 rounded-full bg-muted" />
-                </View>
-              ))
-            : items.map(({ id, label, Icon, onPress }) => {
-            const selected = active === id;
-            return (
-              <Pressable
-                key={id}
-                onPress={onPress}
-                accessibilityRole="tab"
-                aria-selected={selected}
-                accessibilityLabel={label}
-                className={cn(
-                  "flex-1 items-center justify-center rounded-full",
-                  selected && "bg-primary/10"
-                )}
-                style={{
-                  height:
-                    NATIVE_PHONE_COMPOSER_PILL_HEIGHT -
-                    NATIVE_PHONE_COMPOSER_PILL_ITEM_INSET * 2,
-                }}
-              >
-                <Icon
-                  size={23}
-                  color={
-                    selected
-                      ? isDark
-                        ? "#F09050"
-                        : "#E27927"
-                      : isDark
-                      ? "#a1a1aa"
-                      : "#6b7280"
-                  }
-                  strokeWidth={selected ? 2.2 : 1.9}
-                />
-              </Pressable>
-            );
-          })}
-        </View>
+        <GlassTabRow
+          items={items}
+          active={active}
+          loading={!experience.resolved && !projectMode}
+          height={NATIVE_PHONE_COMPOSER_PILL_HEIGHT}
+          itemInset={NATIVE_PHONE_COMPOSER_PILL_ITEM_INSET}
+          maxWidth={navColumn.maxWidth}
+          isDark={isDark}
+        />
         )}
       </View>
       <MobileSettingsSheet

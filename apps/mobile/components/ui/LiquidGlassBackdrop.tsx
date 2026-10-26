@@ -46,7 +46,7 @@ const TINT = {
 const EDGE = { dark: "rgba(255,255,255,0.10)", light: "rgba(0,0,0,0.08)" } as const;
 
 let nativeGlass: boolean | null = null;
-function nativeLiquidGlass(): boolean {
+export function nativeLiquidGlass(): boolean {
   if (Platform.OS !== "ios") return false;
   if (nativeGlass === null) {
     try {
