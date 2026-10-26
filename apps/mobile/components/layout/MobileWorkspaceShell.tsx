@@ -67,6 +67,8 @@ import {
   shouldCaptureOpenSwipe,
 } from "../../lib/drawer-drag";
 import { PROGRESS_REST, SPRING } from "../../lib/motion";
+import { haptics } from "../../lib/haptics";
+import { PressableScale } from "@shogo/shared-ui/primitives";
 import {
   fetchProjectChatSessions,
   projectChatLabel,
@@ -737,7 +739,8 @@ export function MobileWorkspaceShell({ children, enabled = true }: MobileWorkspa
               className="absolute left-3 z-20 flex-row items-center"
               style={{ top: insets.top + 10 }}
             >
-              <Pressable
+              <PressableScale
+                feedback={haptics.selection}
                 accessibilityRole="button"
                 accessibilityLabel={
                   sessionsOpen ? "Close chat sessions" : "Open chat sessions"
@@ -756,7 +759,7 @@ export function MobileWorkspaceShell({ children, enabled = true }: MobileWorkspa
                     strokeWidth={icon.strokeWidth}
                   />
                 </View>
-              </Pressable>
+              </PressableScale>
             </View>
             <View
               className="absolute right-3 z-20 h-11 w-11 items-center justify-center rounded-full bg-transparent"
@@ -830,7 +833,7 @@ export function MobileWorkspaceShell({ children, enabled = true }: MobileWorkspa
                   onPress={openWorkspaceSwitcher}
                 />
                 <View className="mx-4 flex-row items-center gap-2">
-                  <Pressable
+                  <PressableScale
                     accessibilityRole="button"
                     accessibilityLabel="Shogo Home"
                     onPress={() => {
@@ -840,7 +843,7 @@ export function MobileWorkspaceShell({ children, enabled = true }: MobileWorkspa
                     className="h-11 w-11 items-center justify-center rounded-xl active:bg-muted"
                   >
                     <ShogoLogoMark className="h-6 w-6" />
-                  </Pressable>
+                  </PressableScale>
                   <View
                     className="h-12 min-w-0 flex-1 flex-row items-center gap-2 rounded-2xl border border-border/70 bg-background px-3"
                   >
