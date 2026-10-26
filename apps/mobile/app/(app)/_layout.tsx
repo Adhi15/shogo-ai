@@ -328,11 +328,13 @@ function AppLayoutInner() {
     void refresh();
     const timer = setInterval(() => void refresh(), 5 * 60_000);
     const onFocus = () => void refresh(true);
-    if (typeof window !== "undefined") window.addEventListener("focus", onFocus);
+    // `window` exists on native but has no `addEventListener`.
+    const hasWindowEvents = typeof window !== "undefined" && typeof window.addEventListener === "function";
+    if (hasWindowEvents) window.addEventListener("focus", onFocus);
     return () => {
       unsubscribe();
       clearInterval(timer);
-      if (typeof window !== "undefined") window.removeEventListener("focus", onFocus);
+      if (hasWindowEvents) window.removeEventListener("focus", onFocus);
     };
   }, [localMode, isAuthenticated, workspaces]);
 
