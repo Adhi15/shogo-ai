@@ -12,7 +12,6 @@
  * PanResponder is never asked to take it over. Taps are left to the buttons;
  * a release that ends a drag suppresses the button press it would also fire.
  */
-import type React from "react";
 import {
   useCallback,
   useEffect,
@@ -28,7 +27,7 @@ import {
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from "react-native";
-import { GlassContainer, GlassView } from "expo-glass-effect";
+import { GlassView } from "expo-glass-effect";
 import { cn } from "@shogo/shared-ui/primitives";
 import { LiquidGlassBackdrop, nativeLiquidGlass } from "../ui/LiquidGlassBackdrop";
 import { useReducedMotion } from "../../hooks/useReducedMotion";
@@ -74,11 +73,14 @@ const PILL_TINT = {
   light: "rgba(255,255,255,0.1)",
 } as const;
 /**
- * How close glass shapes in the container must be to blend into one another.
- * The capsule always sits inside the pill, so this only shapes how the two
- * glass surfaces melt together at the capsule's edge.
+ * While a finger is down the selection lifts out of the bar as a larger, clear
+ * glass lens above the icons (as the native iOS 26 tab bar does), and the icon
+ * under it is magnified. These are how much bigger the lens gets along the bar
+ * and across it, and how much the icon grows.
  */
-const GLASS_MERGE_SPACING = 24;
+const LENS_SCALE_X = 1.2;
+const LENS_SCALE_Y = 1.5;
+const ICON_MAGNIFY = 1.22;
 /** Drag speed (px/s) at which the capsule is stretched to its limit. */
 const STRETCH_FULL_SPEED = 2600;
 /** Extra width the capsule gains at full stretch (0.3 = 30%). */
@@ -123,6 +125,10 @@ export function GlassTabRow({
   // 0..1: how much the capsule is stretched along its travel, from drag speed.
   const stretch = useRef(new Animated.Value(0)).current;
   const placed = useRef(false);
+  // A finger is on the bar: the lens is lifted and the icon under it magnified.
+  const [pressed, setPressed] = useState(false);
+  const iconScales = useRef<Animated.Value[]>([]).current;
+  while (iconScales.length < items.length) iconScales.push(new Animated.Value(1));
 
   const activeIndex = items.findIndex((item) => item.id === active);
   const activeIndexRef = useRef(activeIndex);
@@ -169,10 +175,12 @@ export function GlassTabRow({
 
   const liftTo = useCallback(
     (toValue: 0 | 1) => {
+      setPressed(toValue === 1);
       if (reducedMotion) return;
       Animated.spring(lift, {
         toValue,
-        ...SPRING.snappy,
+        // A little overshoot: the lens pops up and settles.
+        ...SPRING.bouncy,
         useNativeDriver: true,
       }).start();
     },
@@ -190,6 +198,18 @@ export function GlassTabRow({
     }
     springCapsuleTo(slot.x);
   }, [activeIndex, capsuleX, ready, slots, springCapsuleTo]);
+
+  // Magnify the icon under the lens while a finger is down.
+  useEffect(() => {
+    if (reducedMotion) return;
+    iconScales.forEach((scale, index) => {
+      Animated.spring(scale, {
+        toValue: pressed && index === selectedIndex ? ICON_MAGNIFY : 1,
+        ...SPRING.snappy,
+        useNativeDriver: true,
+      }).start();
+    });
+  }, [iconScales, pressed, reducedMotion, selectedIndex]);
 
   const onItemLayout = (index: number) => (event: LayoutChangeEvent) => {
     const { x, width } = event.nativeEvent.layout;
@@ -313,51 +333,66 @@ export function GlassTabRow({
         borderRadius: height / 2,
       }}
     >
-      <GlassLayer native={nativeLiquidGlass()}>
-        <LiquidGlassBackdrop
-          glassStyle="regular"
-          tintColor={PILL_TINT[scheme]}
-          style={{ borderRadius: height / 2 }}
-        />
-        {showCapsule ? (
-          <Animated.View
-            pointerEvents="none"
-            style={{
-              position: "absolute",
-              top: itemInset,
-              left: 0,
-              width: capsuleWidth,
-              height: itemHeight,
-              borderRadius: capsuleRadius,
-              transform: [
-                { translateX: capsuleX },
-                {
-                  scaleX: stretch.interpolate({
+      <LiquidGlassBackdrop
+        glassStyle="regular"
+        tintColor={PILL_TINT[scheme]}
+        style={{ borderRadius: height / 2 }}
+      />
+      {showCapsule ? (
+        // The selection. At rest a soft tinted glass capsule under the icon;
+        // while a finger is down it pops up bigger than the bar and turns clear
+        // (the native glass animates the style change), with the magnified icon
+        // drawn crisply on top of it.
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: itemInset,
+            left: 0,
+            width: capsuleWidth,
+            height: itemHeight,
+            borderRadius: capsuleRadius,
+            transform: [
+              { translateX: capsuleX },
+              {
+                scaleX: Animated.multiply(
+                  stretch.interpolate({
                     inputRange: [0, 1],
                     outputRange: [1, 1 + STRETCH_AMOUNT],
                   }),
-                },
-                { scale: lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) },
-              ],
-            }}
-          >
-            {nativeLiquidGlass() ? (
-              <GlassView
-                isInteractive
-                glassEffectStyle="regular"
-                colorScheme={scheme}
-                tintColor={CAPSULE_TINT[scheme]}
-                style={[StyleSheet.absoluteFill, { borderRadius: capsuleRadius }]}
-              />
-            ) : (
-              <View
-                className="flex-1 rounded-full bg-primary/10"
-                style={{ borderRadius: capsuleRadius }}
-              />
-            )}
-          </Animated.View>
-        ) : null}
-      </GlassLayer>
+                  lift.interpolate({ inputRange: [0, 1], outputRange: [1, LENS_SCALE_X] }),
+                ),
+              },
+              { scaleY: lift.interpolate({ inputRange: [0, 1], outputRange: [1, LENS_SCALE_Y] }) },
+            ],
+          }}
+        >
+          {nativeLiquidGlass() ? (
+            <GlassView
+              glassEffectStyle={{
+                style: pressed ? "clear" : "regular",
+                animate: true,
+                animationDuration: 0.25,
+              }}
+              colorScheme={scheme}
+              tintColor={pressed ? undefined : CAPSULE_TINT[scheme]}
+              style={[StyleSheet.absoluteFill, { borderRadius: capsuleRadius }]}
+            />
+          ) : (
+            <View
+              style={{
+                flex: 1,
+                borderRadius: capsuleRadius,
+                backgroundColor: pressed
+                  ? isDark ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.55)"
+                  : isDark ? "rgba(240,144,80,0.3)" : "rgba(226,121,39,0.14)",
+                borderWidth: pressed ? StyleSheet.hairlineWidth * 2 : 0,
+                borderColor: isDark ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.9)",
+              }}
+            />
+          )}
+        </Animated.View>
+      ) : null}
       {loading
         ? Array.from({ length: 4 }, (_, index) => (
             <View
@@ -381,11 +416,13 @@ export function GlassTabRow({
                 className={cn("flex-1 items-center justify-center rounded-full")}
                 style={{ height: itemHeight }}
               >
-                <Icon
-                  size={23}
-                  color={selected ? ICON.selected[scheme] : ICON.idle[scheme]}
-                  strokeWidth={selected ? 2.2 : 1.9}
-                />
+                <Animated.View style={{ transform: [{ scale: iconScales[index] }] }}>
+                  <Icon
+                    size={23}
+                    color={selected ? ICON.selected[scheme] : ICON.idle[scheme]}
+                    strokeWidth={selected ? 2.2 : 1.9}
+                  />
+                </Animated.View>
               </Pressable>
             );
           })}
@@ -393,27 +430,3 @@ export function GlassTabRow({
   );
 }
 
-/**
- * The glass surfaces (pill backdrop and selection capsule), kept below the tab
- * icons. On iOS 26 they share one `GlassContainer`, so the capsule's glass
- * blends into the pill's instead of sitting on top of it as a separate sheet.
- * Elsewhere it is just a pass-through layer.
- */
-function GlassLayer({ native, children }: { native: boolean; children: React.ReactNode }) {
-  if (native) {
-    return (
-      <GlassContainer
-        pointerEvents="none"
-        spacing={GLASS_MERGE_SPACING}
-        style={StyleSheet.absoluteFill}
-      >
-        {children}
-      </GlassContainer>
-    );
-  }
-  return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {children}
-    </View>
-  );
-}
