@@ -48,6 +48,12 @@ import {
   WEB_WIDE_MIN_WIDTH,
 } from "../../lib/native-phone-layout";
 
+/**
+ * How opaque the canvas-coloured fade under the composer and tab pills ends.
+ * The glass pills only read as glass when there is content behind them to blur.
+ */
+const GLASS_DOCK_FADE_END_OPACITY = 0.4;
+
 function firstParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -444,6 +450,9 @@ export function MobileBottomNav() {
                 ? NATIVE_PHONE_HOME_CANVAS
                 : undefined
             }
+            // Let content show through the glass pills instead of painting an
+            // almost-opaque canvas under them (the default is 0.94).
+            endOpacity={GLASS_DOCK_FADE_END_OPACITY}
             height={
               NATIVE_PHONE_DOCK_FADE + NATIVE_PHONE_COMPOSER_PILL_HEIGHT + 16
             }
