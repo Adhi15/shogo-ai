@@ -160,6 +160,7 @@ import {
   useComposerLayoutMode,
   useProminentComposerHeight,
 } from "./composer";
+import { Pulse } from "@/components/ui/Spin";
 
 /**
  * Show a native browser tooltip on hover (web only). Wraps children in a
@@ -2570,10 +2571,12 @@ const ChatInputImpl = forwardRef<ChatInputHandle, ChatInputProps>(function ChatI
                   );
                 })}
                 {isProcessingFiles && (
-                  <View
-                    className="rounded-lg overflow-hidden border border-border/60 bg-muted/30 animate-pulse"
-                    style={{ width: 72, height: 72 }}
-                  />
+                  <Pulse>
+                    <View
+                      className="rounded-lg overflow-hidden border border-border/60 bg-muted/30 animate-pulse"
+                      style={{ width: 72, height: 72 }}
+                    />
+                  </Pulse>
                 )}
               </ScrollView>
             )}
