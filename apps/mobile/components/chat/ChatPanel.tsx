@@ -40,6 +40,7 @@ import * as Sentry from "@sentry/react-native"
 import {
   Alert,
   AppState,
+  Dimensions,
   View,
   Text,
   Pressable,
@@ -1382,7 +1383,20 @@ const ChatPanelContent = observer(function ChatPanelContent({
   // KAV lift enabled here makes the composer depend on two independent layout
   // adjustments, which can leave it behind the keyboard in project chat.
   const iosComposerAvoiding = Platform.OS === "ios" && !isNativePhoneLayout
+  // The workspace agent chat lives in a full-screen shell whose bottom chrome
+  // is not the safe-area inset the pad math assumes, which left the composer
+  // flush on the keyboard. Measure where its container really ends instead.
+  const measureSurfaceBottom = isNativePhoneLayout && presentation === "agent"
+  const surfaceRef = useRef<View>(null)
+  const [surfaceBottomOffset, setSurfaceBottomOffset] = useState<number | null>(null)
+  const measureSurface = useCallback(() => {
+    surfaceRef.current?.measureInWindow((_x, y, _width, height) => {
+      const next = Math.round(Dimensions.get("window").height - (y + height))
+      setSurfaceBottomOffset((prev) => (prev === next ? prev : next))
+    })
+  }, [])
   const composerKeyboardPad = useNativeComposerDockPad({
+    measuredBottomOffset: measureSurfaceBottom ? surfaceBottomOffset : null,
     // Native phone uses the RN `Keyboard` bridge; mobile web has no such
     // bridge but tracks the same overlap via `visualViewport` (see
     // `use-native-composer-keyboard.ts`), so enable this for narrow web too.
@@ -8613,6 +8627,8 @@ const ChatPanelContent = observer(function ChatPanelContent({
           />
           <ChangesDockPanel />
           <View
+            ref={surfaceRef}
+            onLayout={measureSurfaceBottom ? measureSurface : undefined}
             className={cn(
               isNativePhoneLayout ? "flex-col flex-1" : "flex-row flex-1",
               presentation === "agent" && "agent-chat-surface",

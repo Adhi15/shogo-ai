@@ -109,10 +109,25 @@ export function nativeComposerDockBottomPad(opts: {
   restPad: number;
   /** Bottom safe-area already occupied by the iOS keyboard frame. */
   safeAreaBottom?: number;
+  /**
+   * How far the composer's container ends above the bottom of the window, when
+   * the screen measured it. The keyboard then overlaps exactly `overlap - this`
+   * of the container, whatever mix of safe-area inset and chrome sits below
+   * it. The dock already adds `NATIVE_COMPOSER_KEYBOARD_GAP` of margin while
+   * the keyboard is open, so that is taken back here: the composer then sits
+   * as close to the keyboard as a DM's does, on its own bottom padding.
+   */
+  measuredBottomOffset?: number | null;
   iosKeyboardAvoiding: boolean;
 }): number {
   if (!opts.keyboardOpen) return opts.restPad;
   if (opts.iosKeyboardAvoiding) return NATIVE_COMPOSER_KEYBOARD_GAP;
+  if (opts.measuredBottomOffset != null) {
+    return Math.max(
+      0,
+      opts.overlap - opts.measuredBottomOffset - NATIVE_COMPOSER_KEYBOARD_GAP
+    );
+  }
   // iOS includes the home-indicator area in the keyboard frame overlap. The
   // Project chat surface is not SafeAreaView-backed, so moving by the full
   // overlap double-counts that inset and leaves a visible ~34pt extra gap.

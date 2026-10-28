@@ -134,21 +134,27 @@ export function useNativeComposerDockPad({
   enabled,
   restPad,
   safeAreaBottom = 0,
+  measuredBottomOffset = null,
   iosKeyboardAvoiding,
   onOpenChange,
 }: {
   enabled: boolean
   restPad: number
   safeAreaBottom?: number
+  /** See `nativeComposerDockBottomPad`; null until the screen has measured. */
+  measuredBottomOffset?: number | null
   iosKeyboardAvoiding: boolean
   onOpenChange?: (open: boolean) => void
 }): Animated.Value {
   const pad = useRef(new Animated.Value(restPad)).current
   const restPadRef = useRef(restPad)
+  const offsetRef = useRef(measuredBottomOffset)
+  const overlapRef = useRef(0)
   const avoidingRef = useRef(iosKeyboardAvoiding)
   const openRef = useRef(false)
   const onOpenChangeRef = useRef(onOpenChange)
   restPadRef.current = restPad
+  offsetRef.current = measuredBottomOffset
   avoidingRef.current = iosKeyboardAvoiding
   onOpenChangeRef.current = onOpenChange
 
@@ -158,6 +164,7 @@ export function useNativeComposerDockPad({
     const keyboardOpen = nativeComposerKeyboardOpenFromSource(source, overlap, rest)
     if (keyboardOpen == null) return
     openRef.current = keyboardOpen
+    overlapRef.current = overlap
     onOpenChangeRef.current?.(keyboardOpen)
     Animated.timing(pad, {
       toValue: nativeComposerDockBottomPad({
@@ -165,6 +172,7 @@ export function useNativeComposerDockPad({
         overlap,
         restPad: rest,
         safeAreaBottom,
+        measuredBottomOffset: offsetRef.current,
         iosKeyboardAvoiding: avoidingRef.current,
       }),
       duration: nativeComposerKeyboardDuration(event.duration),
@@ -178,6 +186,24 @@ export function useNativeComposerDockPad({
       pad.setValue(restPad)
     }
   }, [pad, restPad])
+
+  // Chrome below the composer (the bottom nav) collapses as the keyboard opens,
+  // which moves the container's bottom edge after the keyboard event. Follow it.
+  useEffect(() => {
+    if (!openRef.current || measuredBottomOffset == null) return
+    Animated.timing(pad, {
+      toValue: nativeComposerDockBottomPad({
+        keyboardOpen: true,
+        overlap: overlapRef.current,
+        restPad: restPadRef.current,
+        measuredBottomOffset,
+        iosKeyboardAvoiding: avoidingRef.current,
+      }),
+      duration: 120,
+      easing: nativeComposerKeyboardEasing(),
+      useNativeDriver: false,
+    }).start()
+  }, [pad, measuredBottomOffset])
 
   return pad
 }
