@@ -111,7 +111,6 @@ const PHONE_MORE_DESTINATIONS_LIST = [
   "starred",
   "shared",
 ];
-const PHONE_MORE_DESTINATIONS = new Set(PHONE_MORE_DESTINATIONS_LIST);
 
 /**
  * Screens the bottom nav switches between. The nav bar is a persistent layer
@@ -166,12 +165,14 @@ const PHONE_OWN_CHROME_ROUTES = new Set([
 ]);
 
 /**
- * Workspace chat screens own a finger-following sessions drawer that opens on a
- * right swipe. Left on, the stack's edge swipe pops back to Home from the same
- * gesture, so one swipe did two different things. Home stays a tap away on the
- * dock.
+ * The edge swipe pops the stack, and these screens are peers the dock switches
+ * between rather than drill-downs, so it would reveal whichever tab came before
+ * and snap back. Workspace chat also owns a finger-following sessions drawer on
+ * a right swipe, so one swipe would do two things. Home stays a tap away on the
+ * dock. Everything in `PHONE_TAB_ROUTES` has it off, plus the DMs tab (the rest
+ * of `c/` are conversations you drill into).
  */
-const PHONE_DRAWER_SWIPE_SCREENS = new Set(["index", "agent"]);
+const PHONE_NO_BACK_SWIPE_SCREENS = new Set(["c/dms"]);
 
 const phoneStackScreenOptions = (canvas: string) => ({ route }: { route: { name: string } }) => ({
   ...PHONE_STACK_SCREEN_OPTIONS,
@@ -180,8 +181,8 @@ const phoneStackScreenOptions = (canvas: string) => ({ route }: { route: { name:
   // sits on two half-visible pages.
   animationDuration: PHONE_TAB_FADE_MS,
   gestureEnabled:
-    !PHONE_DRAWER_SWIPE_SCREENS.has(route.name) &&
-    !PHONE_MORE_DESTINATIONS.has(route.name.split("/")[0]),
+    !PHONE_NO_BACK_SWIPE_SCREENS.has(route.name) &&
+    !PHONE_TAB_ROUTES.has(route.name.split("/")[0]),
   animation:
     // On a phone `/settings` only redirects to `/account`. Sliding it in would
     // show an empty page before the redirect lands, so it appears instantly

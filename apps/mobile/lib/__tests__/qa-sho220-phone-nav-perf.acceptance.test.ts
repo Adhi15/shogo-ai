@@ -141,6 +141,29 @@ describe('project screens stay below the status bar', () => {
   })
 })
 
+describe('dock tab screens have no stack back-swipe', () => {
+  const layout = read('app/(app)/_layout.tsx')
+
+  test('the back-swipe is off for every tab route and the DMs tab', () => {
+    expect(layout).toMatch(
+      /gestureEnabled:\s*!PHONE_NO_BACK_SWIPE_SCREENS\.has\(route\.name\)\s*&&\s*!PHONE_TAB_ROUTES\.has\(route\.name\.split\("\/"\)\[0\]\)/,
+    )
+    expect(layout).toMatch(/PHONE_NO_BACK_SWIPE_SCREENS = new Set\(\["c\/dms"\]\)/)
+  })
+
+  test('the tab routes cover Home, More and the project tabs', () => {
+    const list = layout.match(/PHONE_TAB_ROUTES = new Set\(\[([\s\S]*?)\]\)/)?.[1] ?? ''
+    for (const route of [
+      'index', 'agent', 'home', 'more', 'goals', 'meetings', 'activity', 'tasks',
+      'canvases', 'project-chat', 'project-surface',
+    ]) {
+      expect(list).toContain(`"${route}"`)
+    }
+    // The More destinations ride along through the spread.
+    expect(list).toContain('...PHONE_MORE_DESTINATIONS_LIST')
+  })
+})
+
 describe('the project settings card fits a phone', () => {
   test('the look editor takes the compact layout on a phone and lets the page scroll', () => {
     const sheet = read('components/personal/BuddyLookSheet.tsx')
