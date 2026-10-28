@@ -24,6 +24,7 @@ import type { TopBarOverlayState } from "../types";
 import { NativeCircleButton } from "./NativeCircleButton";
 import { NativeClusterIcon, NATIVE_CLUSTER_SLOT } from "./NativeClusterIcon";
 import { TrustBadge } from "../TrustBadge";
+import { LiquidGlassBackdrop } from "../../../ui/LiquidGlassBackdrop";
 
 /** Same inset on both sides, so Back and the trailing controls mirror each other. */
 const NATIVE_HEADER_PAD_X = 16;
@@ -155,13 +156,14 @@ export function NativePhoneHeader({
             ) : null}
             {showChatMoreCluster ? (
               <View
-                className="flex-row items-center rounded-full bg-muted"
+                className="flex-row items-center overflow-hidden rounded-full bg-transparent shadow-sm"
                 testID="project-native-chat-more-cluster"
                 style={{
                   height: NATIVE_PHONE_CONTROL_SIZE,
                   paddingHorizontal: NATIVE_CLUSTER_PAD_X,
                 }}
               >
+                <LiquidGlassBackdrop style={{ borderRadius: 999 }} />
                 <NativeClusterIcon
                   icon={MessageSquare}
                   onPress={() => handleTabPress("chat-fullscreen")}
@@ -194,6 +196,7 @@ export function NativePhoneHeader({
       >
         <View className="flex-row items-center px-4 pb-2">
           <NativeCircleButton
+            flat
             icon={X}
             onPress={() => overlayState.setShowTabsSheet(false)}
             accessibilityLabel="Close"

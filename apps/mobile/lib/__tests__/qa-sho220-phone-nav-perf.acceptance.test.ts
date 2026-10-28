@@ -191,6 +191,13 @@ describe('the project header lines up on a phone', () => {
     expect(header).not.toMatch(/NATIVE_HEADER_PAD_LEFT/)
   })
 
+  test('its round buttons and the chat/more pill are liquid glass, like the rest of the chrome', () => {
+    expect(read('components/project/topbar/native/NativeCircleButton.tsx')).toMatch(/<LiquidGlassBackdrop/)
+    expect(header).toMatch(/project-native-chat-more-cluster[\s\S]*?<LiquidGlassBackdrop/)
+    // Buttons inside a sheet stay flat rather than stacking glass on glass.
+    expect(header).toMatch(/<NativeCircleButton\s+flat/)
+  })
+
   test('the title takes the space between the controls instead of a symmetric inset', () => {
     expect(header).toMatch(/paddingLeft: titleInsetLeft/)
     expect(header).toMatch(/paddingRight: titleInsetRight/)
