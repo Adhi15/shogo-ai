@@ -135,6 +135,7 @@ export function useNativeComposerDockPad({
   restPad,
   safeAreaBottom = 0,
   measuredBottomOffset = null,
+  avoidingClearance,
   iosKeyboardAvoiding,
   onOpenChange,
 }: {
@@ -143,18 +144,22 @@ export function useNativeComposerDockPad({
   safeAreaBottom?: number
   /** See `nativeComposerDockBottomPad`; null until the screen has measured. */
   measuredBottomOffset?: number | null
+  /** See `nativeComposerDockBottomPad`. */
+  avoidingClearance?: number
   iosKeyboardAvoiding: boolean
   onOpenChange?: (open: boolean) => void
 }): Animated.Value {
   const pad = useRef(new Animated.Value(restPad)).current
   const restPadRef = useRef(restPad)
   const offsetRef = useRef(measuredBottomOffset)
+  const clearanceRef = useRef(avoidingClearance)
   const overlapRef = useRef(0)
   const avoidingRef = useRef(iosKeyboardAvoiding)
   const openRef = useRef(false)
   const onOpenChangeRef = useRef(onOpenChange)
   restPadRef.current = restPad
   offsetRef.current = measuredBottomOffset
+  clearanceRef.current = avoidingClearance
   avoidingRef.current = iosKeyboardAvoiding
   onOpenChangeRef.current = onOpenChange
 
@@ -173,6 +178,7 @@ export function useNativeComposerDockPad({
         restPad: rest,
         safeAreaBottom,
         measuredBottomOffset: offsetRef.current,
+        avoidingClearance: clearanceRef.current,
         iosKeyboardAvoiding: avoidingRef.current,
       }),
       duration: nativeComposerKeyboardDuration(event.duration),

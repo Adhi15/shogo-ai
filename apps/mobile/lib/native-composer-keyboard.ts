@@ -119,9 +119,17 @@ export function nativeComposerDockBottomPad(opts: {
    */
   measuredBottomOffset?: number | null;
   iosKeyboardAvoiding: boolean;
+  /**
+   * Extra space above the keyboard when KeyboardAvoidingView already lifts the
+   * screen. Phone composers pass 0 so every chat rests on its own bottom
+   * padding, the same distance above the keyboard as a DM.
+   */
+  avoidingClearance?: number;
 }): number {
   if (!opts.keyboardOpen) return opts.restPad;
-  if (opts.iosKeyboardAvoiding) return NATIVE_COMPOSER_KEYBOARD_GAP;
+  if (opts.iosKeyboardAvoiding) {
+    return opts.avoidingClearance ?? NATIVE_COMPOSER_KEYBOARD_GAP;
+  }
   if (opts.measuredBottomOffset != null) {
     return Math.max(
       0,

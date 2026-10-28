@@ -150,6 +150,16 @@ describe('nativeComposerDockBottomPad', () => {
     })).toBe(302 + NATIVE_COMPOSER_KEYBOARD_GAP)
   })
 
+  test('phone composers lifted by KeyboardAvoidingView add no clearance of their own', () => {
+    expect(nativeComposerDockBottomPad({
+      keyboardOpen: true,
+      overlap: 336,
+      restPad: 12,
+      iosKeyboardAvoiding: true,
+      avoidingClearance: 0,
+    })).toBe(0)
+  })
+
   test('uses the measured container bottom instead of assuming the safe-area inset', () => {
     // The container ends 10pt above the window bottom, so a 328pt keyboard
     // overlaps 318pt of it; the dock's own margin is taken back so the pill

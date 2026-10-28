@@ -1383,10 +1383,11 @@ const ChatPanelContent = observer(function ChatPanelContent({
   // KAV lift enabled here makes the composer depend on two independent layout
   // adjustments, which can leave it behind the keyboard in project chat.
   const iosComposerAvoiding = Platform.OS === "ios" && !isNativePhoneLayout
-  // The workspace agent chat lives in a full-screen shell whose bottom chrome
-  // is not the safe-area inset the pad math assumes, which left the composer
-  // flush on the keyboard. Measure where its container really ends instead.
-  const measureSurfaceBottom = isNativePhoneLayout && presentation === "agent"
+  // Whatever chrome sits under a chat (a safe-area inset, the bottom nav, a
+  // full-screen shell) decides how far the keyboard overlaps it, so assuming
+  // the inset left some chats flush on the keyboard and others far above it.
+  // Every phone chat measures where its container really ends instead.
+  const measureSurfaceBottom = isNativePhoneLayout && Platform.OS !== "web"
   const surfaceRef = useRef<View>(null)
   const [surfaceBottomOffset, setSurfaceBottomOffset] = useState<number | null>(null)
   const measureSurface = useCallback(() => {
