@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { observer } from "mobx-react-lite";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAgentUrl } from "@shogo/shared-app/hooks";
 import { CanvasWebView } from "../canvas/CanvasWebView";
 import { FilesBrowserPanel } from "./panels/FilesBrowserPanel";
@@ -105,15 +106,20 @@ function ProjectCanvasSurface({
 export const ProjectSurfaceView = observer(function ProjectSurfaceView({
   projectId,
   surface = "canvas",
+  padTopInset = false,
 }: {
   projectId: string | undefined;
   surface?: ProjectSurface;
+  /** Keep the surface below the status bar. Only for the full-screen route:
+   * the side pane already sits under its own header. */
+  padTopInset?: boolean;
 }) {
   const { agentUrl, canvasBaseUrl, previewUrl, budgetNotice, dismissBudgetNotice } = useAgentUrl(
     API_URL ?? "",
     projectId ?? ""
   );
   useWorkspaceBudgetToast(budgetNotice, dismissBudgetNotice);
+  const insets = useSafeAreaInsets();
 
   const panel = useMemo(() => {
     if (!projectId) return null;
@@ -130,7 +136,7 @@ export const ProjectSurfaceView = observer(function ProjectSurfaceView({
         return <PlansPanel visible projectId={projectId} agentUrl={agentUrl} />;
       case "settings":
         return (
-          <View className="flex-1 px-5 pt-20">
+          <View className="flex-1 px-5 pt-3">
             <ProjectSettingsContent projectId={projectId} />
           </View>
         );
@@ -154,5 +160,14 @@ export const ProjectSurfaceView = observer(function ProjectSurfaceView({
     );
   }
 
-  return <View className="flex-1 bg-background">{panel}</View>;
+  return (
+    <View
+      className="flex-1 bg-background"
+      style={padTopInset ? { paddingTop: insets.top } : undefined}
+    >
+      {/* The files panel is absolutely filled, so it needs a parent of its own
+          for the padding above to apply. */}
+      <View className="flex-1">{panel}</View>
+    </View>
+  );
 });

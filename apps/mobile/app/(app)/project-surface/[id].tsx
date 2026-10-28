@@ -18,6 +18,7 @@ export default function ProjectSurfaceScreen() {
   }>();
   return (
     <ProjectSurfaceView
+      padTopInset
       projectId={firstParam(params.id)}
       surface={(firstParam(params.surface) ?? "canvas") as ProjectSurface}
     />

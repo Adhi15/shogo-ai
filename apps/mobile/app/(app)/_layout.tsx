@@ -631,7 +631,9 @@ function AppLayoutInner() {
         isSearchPage ||
         isAccountPage ||
         isNotificationsPage ||
-        useMobileWorkspaceShell));
+        // A project page's header pads for nothing itself (4pt), so the shell
+        // has to keep it below the status bar.
+        (useMobileWorkspaceShell && !isProjectDetail)));
 
   return (
     <TeamChatSidebarProvider

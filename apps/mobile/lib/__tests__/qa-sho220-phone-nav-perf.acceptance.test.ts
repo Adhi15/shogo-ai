@@ -128,6 +128,19 @@ describe('every More destination has a way back', () => {
   })
 })
 
+describe('project screens stay below the status bar', () => {
+  test('the shell does not pad a project page, whose header pads itself', () => {
+    expect(read('app/(app)/_layout.tsx')).toMatch(/useMobileWorkspaceShell && !isProjectDetail/)
+  })
+
+  test('the full-screen surface route pads itself, the side pane does not', () => {
+    const view = read('components/project/ProjectSurfaceView.tsx')
+    expect(view).toMatch(/padTopInset \? \{ paddingTop: insets\.top \}/)
+    expect(read('app/(app)/project-surface/[id].tsx')).toMatch(/\bpadTopInset\b/)
+    expect(read('components/team-chat/ProjectSidePane.tsx')).not.toMatch(/padTopInset/)
+  })
+})
+
 describe('the sidebar sheet is not mounted until it is opened', () => {
   test('the phone layout asks for a lazy sheet and the shell honours it', () => {
     const layout = read('app/(app)/_layout.tsx')
