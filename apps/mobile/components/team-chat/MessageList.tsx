@@ -257,7 +257,7 @@ export function MessageList({
           </View>
         }
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        keyboardDismissMode="on-drag"
         alwaysBounceVertical={Platform.OS === 'ios'}
       />
       {showUnreadPill ? (

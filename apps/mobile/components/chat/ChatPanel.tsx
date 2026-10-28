@@ -8686,12 +8686,13 @@ const ChatPanelContent = observer(function ChatPanelContent({
                   keyboardShouldPersistTaps={
                     isNative && nativeInlineEditing ? "always" : "handled"
                   }
-                  // Dragging the transcript down takes the keyboard with it, as
-                  // in Messages. Bouncing even when the chat is short lets an
+                  // Dragging the transcript closes the keyboard. `on-drag`, not
+                  // `interactive`: the composer rides the keyboard's own show
+                  // and hide animation, and iOS reports no frames while a
+                  // finger drags the keyboard, so the composer would sit still
+                  // and then jump. Bouncing even when the chat is short lets an
                   // empty or one-message chat be dragged too.
-                  keyboardDismissMode={
-                    Platform.OS === "ios" ? "interactive" : "on-drag"
-                  }
+                  keyboardDismissMode="on-drag"
                   alwaysBounceVertical={Platform.OS === "ios"}
                   onTouchStart={(e) => {
                     if (Platform.OS === "web") return
