@@ -86,11 +86,12 @@ describe("the workspace avatar is Home's only sidebar button", () => {
     expect(withLeading).toEqual(['components/home/MobileHomeFeed.tsx'])
   })
 
-  test('that control is the avatar, and it asks for the drawer', () => {
+  test('that control is the avatar, and it opens the workspace switcher, not the drawer', () => {
     const feed = read('components/home/MobileHomeFeed.tsx')
     expect(feed).toMatch(/leading=\{<WorkspaceSidebarAvatar/)
     const avatar = read('components/layout/WorkspaceSidebarAvatar.tsx')
-    expect(avatar).toContain('sidebarOpenEvents.requestOpenSidebar()')
+    expect(avatar).toContain('MobileWorkspaceSwitcherSheet')
+    expect(avatar).not.toContain('requestOpenSidebar')
     expect(avatar).toContain('home-sidebar-avatar')
   })
 })
