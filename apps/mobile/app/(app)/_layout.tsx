@@ -130,12 +130,21 @@ const PHONE_TAB_SCREENS = new Set(["c/dms", "c/[conversationId]"]);
 
 const PHONE_TAB_FADE_MS = 140;
 
+/**
+ * Workspace chat screens own a finger-following sessions drawer that opens on a
+ * right swipe. Left on, the stack's edge swipe pops back to Home from the same
+ * gesture, so one swipe did two different things. Home stays a tap away on the
+ * dock.
+ */
+const PHONE_DRAWER_SWIPE_SCREENS = new Set(["index", "agent"]);
+
 const phoneStackScreenOptions = (canvas: string) => ({ route }: { route: { name: string } }) => ({
   ...PHONE_STACK_SCREEN_OPTIONS,
   contentStyle: { backgroundColor: canvas },
   // Only read for `fade`: a short dissolve, so a quick run of tab taps never
   // sits on two half-visible pages.
   animationDuration: PHONE_TAB_FADE_MS,
+  gestureEnabled: !PHONE_DRAWER_SWIPE_SCREENS.has(route.name),
   animation:
     // On a phone `/settings` only redirects to `/account`. Sliding it in would
     // show an empty page before the redirect lands, so it appears instantly
