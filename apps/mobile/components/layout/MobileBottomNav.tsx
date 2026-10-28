@@ -68,6 +68,9 @@ function isHomePath(pathname: string) {
   );
 }
 
+const MORE_DESTINATION_PATH =
+  /\/(analytics|work|social|marketplace|creator|starred|shared)(\/|$)/;
+
 function isBottomTabPath(pathname: string) {
   return ["/tasks", "/activity", "/canvases", "/goals"].some(
     (path) =>
@@ -214,7 +217,9 @@ export function MobileBottomNav() {
     if (pathname.includes("/activity")) return "activity";
     if (pathname.includes("/canvases")) return "canvases";
     if (pathname.includes("/settings")) return "more";
-    if (pathname.includes("/marketplace")) return "none";
+    // The More tab's destinations keep More lit; falling through to "chat"
+    // lit Home while the screen on show was Analytics, My work or Social.
+    if (MORE_DESTINATION_PATH.test(pathname)) return "more";
     return "chat";
   }, [
     params.navTab,

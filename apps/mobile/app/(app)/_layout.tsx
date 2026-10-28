@@ -98,6 +98,22 @@ const PHONE_STACK_SCREEN_OPTIONS = {
 } as const;
 
 /**
+ * What the More tab lists. The dock stays up under them, so they cross-fade like
+ * a tab, and their edge swipe is off: dragging one aside dims the page but not
+ * the dock's strip, leaving a white band along the bottom.
+ */
+const PHONE_MORE_DESTINATIONS_LIST = [
+  "analytics",
+  "work",
+  "social",
+  "marketplace",
+  "creator",
+  "starred",
+  "shared",
+];
+const PHONE_MORE_DESTINATIONS = new Set(PHONE_MORE_DESTINATIONS_LIST);
+
+/**
  * Screens the bottom nav switches between. The nav bar is a persistent layer
  * outside the stack, so sliding a whole page in dims and moves everything
  * except the strip the nav sits on, leaving a white band along the bottom for
@@ -119,6 +135,7 @@ const PHONE_TAB_ROUTES = new Set([
   // The team dock's tabs.
   "home",
   "more",
+  ...PHONE_MORE_DESTINATIONS_LIST,
 ]);
 
 /**
@@ -162,7 +179,9 @@ const phoneStackScreenOptions = (canvas: string) => ({ route }: { route: { name:
   // Only read for `fade`: a short dissolve, so a quick run of tab taps never
   // sits on two half-visible pages.
   animationDuration: PHONE_TAB_FADE_MS,
-  gestureEnabled: !PHONE_DRAWER_SWIPE_SCREENS.has(route.name),
+  gestureEnabled:
+    !PHONE_DRAWER_SWIPE_SCREENS.has(route.name) &&
+    !PHONE_MORE_DESTINATIONS.has(route.name.split("/")[0]),
   animation:
     // On a phone `/settings` only redirects to `/account`. Sliding it in would
     // show an empty page before the redirect lands, so it appears instantly
