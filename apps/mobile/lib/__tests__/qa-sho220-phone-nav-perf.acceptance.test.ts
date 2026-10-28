@@ -112,6 +112,22 @@ describe('screens with their own header skip the legacy hamburger header', () =>
   })
 })
 
+describe('every More destination has a way back', () => {
+  test('each one draws the shared phone back arrow', () => {
+    const screens: Record<string, string> = {
+      'app/(app)/analytics.tsx': /<TabScreen[^>]*\bback\b/.source,
+      'app/(app)/work.tsx': /<PhoneBackButton \/>/.source,
+      'app/(app)/social.tsx': /<PhoneBackButton \/>/.source,
+      'app/(app)/starred.tsx': /<PhoneBackButton \/>/.source,
+      'app/(app)/shared.tsx': /<PhoneBackButton \/>/.source,
+      'app/(app)/creator/index.tsx': /<PhoneBackButton \/>/.source,
+    }
+    for (const [file, pattern] of Object.entries(screens)) {
+      expect(read(file), file).toMatch(new RegExp(pattern))
+    }
+  })
+})
+
 describe('the sidebar sheet is not mounted until it is opened', () => {
   test('the phone layout asks for a lazy sheet and the shell honours it', () => {
     const layout = read('app/(app)/_layout.tsx')
