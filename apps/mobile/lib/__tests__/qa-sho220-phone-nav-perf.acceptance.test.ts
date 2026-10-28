@@ -183,6 +183,20 @@ describe('the project settings card fits a phone', () => {
   })
 })
 
+describe('the project header lines up on a phone', () => {
+  const header = read('components/project/topbar/native/NativePhoneHeader.tsx')
+
+  test('Back and the trailing controls share one edge inset', () => {
+    expect(header).toMatch(/NATIVE_HEADER_PAD_X = 16/)
+    expect(header).not.toMatch(/NATIVE_HEADER_PAD_LEFT/)
+  })
+
+  test('the title takes the space between the controls instead of a symmetric inset', () => {
+    expect(header).toMatch(/paddingLeft: titleInsetLeft/)
+    expect(header).toMatch(/paddingRight: titleInsetRight/)
+  })
+})
+
 describe('the sidebar sheet is not mounted until it is opened', () => {
   test('the phone layout asks for a lazy sheet and the shell honours it', () => {
     const layout = read('app/(app)/_layout.tsx')

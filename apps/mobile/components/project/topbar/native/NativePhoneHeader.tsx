@@ -13,10 +13,7 @@ import {
   X,
 } from "lucide-react-native";
 import { cn } from "@shogo/shared-ui/primitives";
-import {
-  NATIVE_HEADER_PAD_BOTTOM,
-  nativePhoneTitleInset,
-} from "../../../../lib/project-topbar-layout";
+import { NATIVE_HEADER_PAD_BOTTOM } from "../../../../lib/project-topbar-layout";
 import {
   NATIVE_PHONE_CONTROL_SIZE,
   NATIVE_PHONE_SHEET_BODY_RATIO,
@@ -28,8 +25,10 @@ import { NativeCircleButton } from "./NativeCircleButton";
 import { NativeClusterIcon, NATIVE_CLUSTER_SLOT } from "./NativeClusterIcon";
 import { TrustBadge } from "../TrustBadge";
 
-const NATIVE_HEADER_PAD_X = 12;
-const NATIVE_HEADER_PAD_LEFT = 28;
+/** Same inset on both sides, so Back and the trailing controls mirror each other. */
+const NATIVE_HEADER_PAD_X = 16;
+/** Breathing room between the title and the controls either side of it. */
+const NATIVE_TITLE_GAP = 12;
 const NATIVE_HEADER_PAD_TOP = 4;
 const NATIVE_CLUSTER_PAD_X = 6;
 const NATIVE_CLUSTER_WIDTH = NATIVE_CLUSTER_PAD_X * 2 + NATIVE_CLUSTER_SLOT * 2;
@@ -73,14 +72,17 @@ export function NativePhoneHeader({
 }) {
   const onChat = narrowActiveTab === "chat";
   const showChatMoreCluster = !onChat;
-  const leftChrome = NATIVE_HEADER_PAD_LEFT + NATIVE_PHONE_CONTROL_SIZE;
+  const leftChrome = NATIVE_HEADER_PAD_X + NATIVE_PHONE_CONTROL_SIZE;
   const rightChrome =
     NATIVE_HEADER_PAD_X +
     (showChatMoreCluster ? NATIVE_CLUSTER_WIDTH : NATIVE_PHONE_CONTROL_SIZE) +
     (showTrustBadge ? NATIVE_PHONE_CONTROL_SIZE + 8 : 0) +
     (onMessageAgent ? NATIVE_PHONE_CONTROL_SIZE + 8 : 0) +
     (remoteHostIndicator ? NATIVE_REMOTE_INDICATOR_WIDTH : 0);
-  const titleInset = nativePhoneTitleInset(leftChrome, rightChrome);
+  // The title sits in the space between the two control groups, so it gets
+  // every point they leave free before it truncates.
+  const titleInsetLeft = leftChrome + NATIVE_TITLE_GAP;
+  const titleInsetRight = rightChrome + NATIVE_TITLE_GAP;
 
   return (
     <>
@@ -103,7 +105,8 @@ export function NativePhoneHeader({
             height: NATIVE_PHONE_CONTROL_SIZE,
             left: 0,
             right: 0,
-            paddingHorizontal: titleInset,
+            paddingLeft: titleInsetLeft,
+            paddingRight: titleInsetRight,
           }}
           accessibilityLabel={`${projectName}. Project options`}
           accessibilityRole="button"
@@ -123,7 +126,6 @@ export function NativePhoneHeader({
           style={{
             height: NATIVE_PHONE_CONTROL_SIZE,
             paddingHorizontal: NATIVE_HEADER_PAD_X,
-            paddingLeft: NATIVE_HEADER_PAD_LEFT,
             zIndex: 2,
           }}
         >
