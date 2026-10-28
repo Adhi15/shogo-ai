@@ -131,6 +131,24 @@ const PHONE_TAB_SCREENS = new Set(["c/dms", "c/[conversationId]"]);
 const PHONE_TAB_FADE_MS = 140;
 
 /**
+ * Phone screens that bring their own header (a large title, or a title with a
+ * back arrow), so they skip the shared hamburger header and its sidebar drawer.
+ */
+const PHONE_OWN_CHROME_ROUTES = new Set([
+  "analytics",
+  "work",
+  "social",
+  "marketplace",
+  "creator",
+  "starred",
+  "shared",
+  "affiliate",
+  "huddles",
+  "new-workspace",
+  "f",
+]);
+
+/**
  * Workspace chat screens own a finger-following sessions drawer that opens on a
  * right swipe. Left on, the stack's edge swipe pops back to Home from the same
  * gesture, so one swipe did two different things. Home stays a tap away on the
@@ -284,6 +302,9 @@ function AppLayoutInner() {
   const isAIModelsPage =
     pathname === "/ai-models" || pathname === "/(app)/ai-models";
   const isMeetingsPage = /\/meetings\/?$/.test(pathname);
+  // These pad for the status bar themselves (TabScreen or safe-area insets), so
+  // the shell must not add the inset a second time.
+  const isSelfInsetPage = /\/(analytics|work|social)\/?$/.test(pathname);
   const isNonChatWorkspacePage = [
     "/tasks",
     "/activity",
@@ -291,6 +312,12 @@ function AppLayoutInner() {
     "/goals",
     "/meetings",
   ].some((segment) => pathname.includes(segment));
+  // Screens that draw their own title or back arrow. Wrapping them in the
+  // legacy hamburger header stacked two headers and opened the full AppSidebar,
+  // a different left drawer from the rest of the phone app.
+  const isOwnChromePage = PHONE_OWN_CHROME_ROUTES.has(
+    pathname.split("/").filter((part) => part && part !== "(app)")[0] ?? "",
+  );
 
   usePostHogIdentify();
   const posthog = usePostHogSafe();
@@ -444,6 +471,7 @@ function AppLayoutInner() {
     isProjectChatsPage ||
     isAIModelsPage ||
     isNonChatWorkspacePage ||
+    isOwnChromePage ||
     isTeamTabScreen ||
     isNewConversationPage ||
     isFloatingConversation;
@@ -579,6 +607,7 @@ function AppLayoutInner() {
       !isIdeEmbed &&
       (isHomePage ||
         isTeamTabScreen ||
+        isSelfInsetPage ||
         isMeetingsPage ||
         isSearchPage ||
         isAccountPage ||

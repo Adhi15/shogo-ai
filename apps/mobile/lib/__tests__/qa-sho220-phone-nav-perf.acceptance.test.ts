@@ -96,6 +96,22 @@ describe("the workspace avatar is Home's only sidebar button", () => {
   })
 })
 
+describe('screens with their own header skip the legacy hamburger header', () => {
+  const layout = read('app/(app)/_layout.tsx')
+
+  test('the phone own-chrome list covers the More destinations and Marketplace', () => {
+    const list = layout.match(/PHONE_OWN_CHROME_ROUTES = new Set\(\[([\s\S]*?)\]\)/)?.[1] ?? ''
+    for (const route of ['analytics', 'work', 'social', 'marketplace', 'creator']) {
+      expect(list).toContain(`"${route}"`)
+    }
+  })
+
+  test('those screens drop the shared header, and with it the legacy drawer swipe', () => {
+    expect(layout).toMatch(/isOwnChromePage \|\|/)
+    expect(layout).toMatch(/!suppressNarrowAppHeader/)
+  })
+})
+
 describe('the sidebar sheet is not mounted until it is opened', () => {
   test('the phone layout asks for a lazy sheet and the shell honours it', () => {
     const layout = read('app/(app)/_layout.tsx')
