@@ -141,6 +141,25 @@ describe('project screens stay below the status bar', () => {
   })
 })
 
+describe('the project settings card fits a phone', () => {
+  test('the look editor takes the compact layout on a phone and lets the page scroll', () => {
+    const sheet = read('components/personal/BuddyLookSheet.tsx')
+    expect(sheet).toMatch(/layout \?\? \(isPhone \? "compact" : "full"\)/)
+    expect(sheet).toMatch(/<BuddyLookContent[^>]*\binline\b/)
+    // No nested scroller: it clipped the last rows inside a page that already scrolls.
+    expect(read('components/island/buddy/BuddyCustomizer.tsx')).toMatch(/if \(inline\) return <View>/)
+  })
+
+  test('colour swatches sit in fixed rows, not one wrapping list', () => {
+    const customizer = read('components/island/buddy/BuddyCustomizer.tsx')
+    expect(customizer).toMatch(/swatchesPerRow=\{SWATCHES_PER_ROW\}/)
+  })
+
+  test('the settings surface scrolls', () => {
+    expect(read('components/project/ProjectSurfaceView.tsx')).toMatch(/<ScrollView[\s\S]*?<ProjectSettingsContent/)
+  })
+})
+
 describe('the sidebar sheet is not mounted until it is opened', () => {
   test('the phone layout asks for a lazy sheet and the shell honours it', () => {
     const layout = read('app/(app)/_layout.tsx')

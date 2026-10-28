@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Shogo Technologies, Inc.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { observer } from "mobx-react-lite";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAgentUrl } from "@shogo/shared-app/hooks";
@@ -136,9 +136,13 @@ export const ProjectSurfaceView = observer(function ProjectSurfaceView({
         return <PlansPanel visible projectId={projectId} agentUrl={agentUrl} />;
       case "settings":
         return (
-          <View className="flex-1 px-5 pt-3">
+          <ScrollView
+            className="flex-1"
+            contentContainerClassName="px-5 pb-32 pt-3"
+            keyboardShouldPersistTaps="handled"
+          >
             <ProjectSettingsContent projectId={projectId} />
-          </View>
+          </ScrollView>
         );
       case "canvas":
       default:

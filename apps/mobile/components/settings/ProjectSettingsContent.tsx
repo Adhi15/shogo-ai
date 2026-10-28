@@ -39,7 +39,7 @@ export function ProjectSettingsContent({ projectId }: { projectId: string }) {
   };
 
   return (
-    <View className="flex-1">
+    <View>
       <Text className="text-sm text-muted-foreground">
         {canRename
           ? "Settings for this project only."
