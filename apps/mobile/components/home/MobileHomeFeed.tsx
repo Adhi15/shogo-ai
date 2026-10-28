@@ -199,6 +199,17 @@ export const MobileHomeFeed = observer(function MobileHomeFeed() {
     return list
   }, [workspaceId, rows.length, unlisted, mentions, starred, unread, recent, router, chat.enabled, channels])
 
+  // A collapsed section keeps its header and hands the list no rows.
+  const visibleSections = useMemo<HomeSection[]>(
+    () =>
+      sections.map((section) =>
+        section.label && !section.fixed && (collapsed[section.key] ?? section.defaultCollapsed ?? false)
+          ? { ...section, data: [] }
+          : section,
+      ),
+    [sections, collapsed],
+  )
+
   const renderItem = useCallback(
     ({ item }: { item: HomeRow }) => {
       switch (item.kind) {
@@ -260,7 +271,7 @@ export const MobileHomeFeed = observer(function MobileHomeFeed() {
     >
       <SectionList
         testID="home-sections"
-        sections={sections}
+        sections={visibleSections}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         renderSectionHeader={renderSectionHeader}

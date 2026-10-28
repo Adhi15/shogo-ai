@@ -215,6 +215,12 @@ describe('the Home feed rows share one page gutter', () => {
     expect(feed).not.toMatch(/rounded-md px-2 py-2/)
   })
 
+  test('a collapsed section hands the list no rows', () => {
+    expect(feed).toMatch(/collapsed\[section\.key\] \?\? section\.defaultCollapsed/)
+    expect(feed).toMatch(/\{ \.\.\.section, data: \[\] \}/)
+    expect(feed).toMatch(/sections=\{visibleSections\}/)
+  })
+
   test('the agent cards and the agents panel follow the same gutter on a phone', () => {
     expect(read('components/home/AgentsSection.tsx')).toMatch(/gap-2 px-3 pb-2 pt-2/)
     expect(read('components/home/AgentRowItem.tsx')).not.toMatch(/"px-4 pb-2"/)
