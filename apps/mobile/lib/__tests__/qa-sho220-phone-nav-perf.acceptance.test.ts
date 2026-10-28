@@ -204,6 +204,26 @@ describe('the project header lines up on a phone', () => {
   })
 })
 
+describe('the Home feed rows share one page gutter', () => {
+  const feed = read('components/home/MobileHomeFeed.tsx')
+
+  test('the list pads once and every row takes its inset from that', () => {
+    expect(feed).toMatch(/contentContainerClassName="px-1 pb-36"/)
+    // The search card, project rows and failed rows sit at the same gutter as channel rows.
+    expect(feed).toMatch(/mx-3 mb-3 mt-1/)
+    expect(feed).toMatch(/gap-3 rounded-md px-3 py-2/)
+    expect(feed).not.toMatch(/rounded-md px-2 py-2/)
+  })
+
+  test('the agent cards and the agents panel follow the same gutter on a phone', () => {
+    expect(read('components/home/AgentsSection.tsx')).toMatch(/gap-2 px-3 pb-2 pt-2/)
+    expect(read('components/home/AgentRowItem.tsx')).not.toMatch(/"px-4 pb-2"/)
+    const panel = read('components/team-chat/panels/AgentsPanel.tsx')
+    expect(panel).toMatch(/phone \? 'px-1' : 'px-2'/)
+    expect(panel).toMatch(/phone \? '-mx-2' : undefined/)
+  })
+})
+
 describe('the sidebar sheet is not mounted until it is opened', () => {
   test('the phone layout asks for a lazy sheet and the shell honours it', () => {
     const layout = read('app/(app)/_layout.tsx')
