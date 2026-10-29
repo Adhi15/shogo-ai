@@ -348,3 +348,23 @@ describe('the composer rides the keyboard without relaying out the chat every fr
     expect(hook).toMatch(/if \(moved\) \{\s*LayoutAnimation\.configureNext/)
   })
 })
+
+describe('a project reached from its own tab bar can always be left', () => {
+  const shell = read('components/layout/MobileWorkspaceShell.tsx')
+  const surfaceRoute = read('app/(app)/project-surface/[id].tsx')
+  const surfaceHeader = read('components/project/ProjectSurfaceHeader.tsx')
+
+  test('the project chat route carries Back and the project name next to the menu', () => {
+    expect(shell).toMatch(/isProjectChatRoute = showChatChrome && \/\\\/project-chat\\\/\/\.test\(pathname\)/)
+    expect(shell).toMatch(/testID="project-chat-back"/)
+    expect(shell).toMatch(/testID="project-chat-title"/)
+  })
+
+  test('canvas, files and plans get a header with Back and the project name', () => {
+    expect(surfaceRoute).toMatch(/header=\{<ProjectSurfaceHeader/)
+    expect(surfaceHeader).toMatch(/testID="project-surface-back"/)
+    // Back pops to where the project was opened from, and falls back to Home.
+    expect(surfaceHeader).toMatch(/router\.canGoBack\(\)\) router\.back\(\)/)
+    expect(surfaceHeader).toMatch(/router\.replace\("\/\(app\)\/home"/)
+  })
+})

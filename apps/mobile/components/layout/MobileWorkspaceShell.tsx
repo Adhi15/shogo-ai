@@ -33,6 +33,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import {
+  ArrowLeft,
   ChevronDown,
   ChevronRight,
   Folder,
@@ -53,6 +54,7 @@ import {
   useProjectCollection,
 } from "../../contexts/domain";
 import { useActiveWorkspace } from "../../hooks/useActiveWorkspace";
+import { NativeCircleButton } from "../project/topbar/native/NativeCircleButton";
 import {
   projectPermissionsFor,
   usePermissions,
@@ -206,6 +208,17 @@ export function MobileWorkspaceShell({ children, enabled = true }: MobileWorkspa
     !["canvas", "external-preview", "app-preview", "files", "plans"].includes(
       projectPane ?? ""
     );
+  // A project's chat reached from its own tab bar has no project header, so it
+  // carries Back and the project name here: swiping open the drawer to leave
+  // the project was the only way out.
+  const isProjectChatRoute = showChatChrome && /\/project-chat\//.test(pathname);
+  const projectChatName = isProjectChatRoute
+    ? projects.all.find((project: any) => project.id === activeProjectId)?.name
+    : undefined;
+  const leaveProject = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/(app)/home" as any);
+  }, [router]);
   const drawerWidth = Math.min(width * 0.86, 360);
   const sessionsOpenRef = useRef(sessionsOpen);
   const showChatChromeRef = useRef(showChatChrome);
@@ -736,9 +749,17 @@ export function MobileWorkspaceShell({ children, enabled = true }: MobileWorkspa
         {showChatChrome ? (
           <>
             <View
-              className="absolute left-3 z-20 flex-row items-center"
+              className="absolute left-3 z-20 flex-row items-center gap-2"
               style={{ top: insets.top + 10 }}
             >
+              {isProjectChatRoute ? (
+                <NativeCircleButton
+                  icon={ArrowLeft}
+                  onPress={leaveProject}
+                  accessibilityLabel="Back"
+                  testID="project-chat-back"
+                />
+              ) : null}
               <PressableScale
                 feedback={haptics.selection}
                 accessibilityRole="button"
@@ -761,6 +782,21 @@ export function MobileWorkspaceShell({ children, enabled = true }: MobileWorkspa
                 </View>
               </PressableScale>
             </View>
+            {projectChatName ? (
+              <View
+                pointerEvents="none"
+                className="absolute z-10 h-11 justify-center"
+                style={{ top: insets.top + 10, left: 12 + 44 + 8 + 44 + 8, right: 12 + 44 + 8 }}
+              >
+                <Text
+                  className="text-[17px] font-semibold text-foreground"
+                  numberOfLines={1}
+                  testID="project-chat-title"
+                >
+                  {projectChatName}
+                </Text>
+              </View>
+            ) : null}
             <View
               className="absolute right-3 z-20 h-11 w-11 items-center justify-center rounded-full bg-transparent"
               style={{ top: insets.top + 10 }}
