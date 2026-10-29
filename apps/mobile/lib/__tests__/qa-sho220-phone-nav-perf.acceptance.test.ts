@@ -481,3 +481,17 @@ describe('phone-only changes leave web and desktop as they were', () => {
     expect(settings).toMatch(/className=\{phone \? undefined : "flex-1"\}/)
   })
 })
+
+describe('Android team conversations', () => {
+  const conversation = read('app/(app)/c/[conversationId].tsx')
+  const messageList = read('components/team-chat/MessageList.tsx')
+
+  test('the composer avoids the keyboard on every native platform, not only iOS', () => {
+    // Android draws edge to edge, so the window no longer resizes for the keyboard.
+    expect(conversation).toMatch(/behavior=\{Platform\.OS === 'web' \? undefined : 'padding'\}/)
+  })
+
+  test('the empty-state text is not flipped a second time on Android', () => {
+    expect(messageList).toMatch(/style=\{Platform\.OS === 'android' \? undefined : \{ transform: \[\{ scaleY: -1 \}\] \}\}/)
+  })
+})
