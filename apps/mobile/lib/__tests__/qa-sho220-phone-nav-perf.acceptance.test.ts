@@ -403,6 +403,24 @@ describe('a project that is still loading keeps its header on a phone', () => {
   })
 })
 
+describe('the phone workspace sheet lines its rows up', () => {
+  const menu = read('components/layout/sidebar/WorkspaceMenuSection.tsx')
+  const row = read('components/layout/sidebar/WorkspaceRow.tsx')
+  const switcher = read('components/layout/MobileWorkspaceSwitcher.tsx')
+
+  test('the sheet lists workspaces only, under its own title', () => {
+    expect(switcher).toMatch(/presentation="sheet"/)
+    expect(menu).toMatch(/presentation === "sheet"/)
+  })
+
+  test('workspace tiles and action tiles share one size and gutter', () => {
+    expect(row).toMatch(/isNative \? 'px-4 py-3'/)
+    expect(row).toMatch(/h-10 w-10 items-center justify-center rounded-xl/)
+    expect(menu).toMatch(/h-10 w-10 items-center justify-center rounded-xl bg-muted/)
+    expect(menu).toMatch(/flex-row items-center gap-3 px-4 py-3 active:bg-muted/)
+  })
+})
+
 describe('a project reached from its own tab bar can always be left', () => {
   const shell = read('components/layout/MobileWorkspaceShell.tsx')
   const surfaceRoute = read('app/(app)/project-surface/[id].tsx')
