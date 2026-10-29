@@ -393,6 +393,16 @@ describe('no navigator paints its default light background', () => {
   })
 })
 
+describe('a project that is still loading keeps its header on a phone', () => {
+  const layout = read('app/(app)/projects/[id]/_layout.tsx')
+
+  test('the loading page shows Back and the project name above the spinner', () => {
+    expect(layout).toMatch(
+      /Platform\.OS !== "web" \? \(\s*<View className="bg-background" style=\{\{ paddingTop: insets\.top \}\}>\s*<ProjectSurfaceHeader projectId=\{projectId\} \/>/,
+    )
+  })
+})
+
 describe('a project reached from its own tab bar can always be left', () => {
   const shell = read('components/layout/MobileWorkspaceShell.tsx')
   const surfaceRoute = read('app/(app)/project-surface/[id].tsx')
