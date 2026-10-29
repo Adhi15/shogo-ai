@@ -202,6 +202,14 @@ describe('the project header lines up on a phone', () => {
     expect(header).toMatch(/paddingLeft: titleInsetLeft/)
     expect(header).toMatch(/paddingRight: titleInsetRight/)
   })
+
+  test('chat history is one tap from the chat tab, in the same pill as messaging the agent', () => {
+    expect(header).toMatch(/testID="project-native-history"/)
+    expect(header).toMatch(/onPress=\{\(\) => onOpenChatSessions\?\.\(\)\}/)
+    // Messaging the agent lives in the pill, not as a third round button squeezing the title.
+    expect(header).toMatch(/project-native-chat-more-cluster[\s\S]*?project-message-agent/)
+    expect(header).toMatch(/clusterSlots/)
+  })
 })
 
 describe('the Home feed rows share one page gutter', () => {

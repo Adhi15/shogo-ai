@@ -32,7 +32,6 @@ const NATIVE_HEADER_PAD_X = 16;
 const NATIVE_TITLE_GAP = 12;
 const NATIVE_HEADER_PAD_TOP = 4;
 const NATIVE_CLUSTER_PAD_X = 6;
-const NATIVE_CLUSTER_WIDTH = NATIVE_CLUSTER_PAD_X * 2 + NATIVE_CLUSTER_SLOT * 2;
 const NATIVE_REMOTE_INDICATOR_WIDTH = 138;
 
 export function NativePhoneHeader({
@@ -72,13 +71,20 @@ export function NativePhoneHeader({
   overlayState: TopBarOverlayState;
 }) {
   const onChat = narrowActiveTab === "chat";
-  const showChatMoreCluster = !onChat;
+  // Off the chat tab the cluster leads with a way back to chat; on it, with the
+  // chat history, so past conversations are one tap away instead of buried in
+  // the tabs sheet.
+  const showContextIcon = !onChat || !!onOpenChatSessions;
+  // Messaging the agent rides in the same pill, so a third control does not
+  // squeeze the title.
+  const clusterSlots = 1 + (showContextIcon ? 1 : 0) + (onMessageAgent ? 1 : 0);
+  const showCluster = clusterSlots > 1;
+  const clusterWidth = NATIVE_CLUSTER_PAD_X * 2 + NATIVE_CLUSTER_SLOT * clusterSlots;
   const leftChrome = NATIVE_HEADER_PAD_X + NATIVE_PHONE_CONTROL_SIZE;
   const rightChrome =
     NATIVE_HEADER_PAD_X +
-    (showChatMoreCluster ? NATIVE_CLUSTER_WIDTH : NATIVE_PHONE_CONTROL_SIZE) +
+    (showCluster ? clusterWidth : NATIVE_PHONE_CONTROL_SIZE) +
     (showTrustBadge ? NATIVE_PHONE_CONTROL_SIZE + 8 : 0) +
-    (onMessageAgent ? NATIVE_PHONE_CONTROL_SIZE + 8 : 0) +
     (remoteHostIndicator ? NATIVE_REMOTE_INDICATOR_WIDTH : 0);
   // The title sits in the space between the two control groups, so it gets
   // every point they leave free before it truncates.
@@ -146,15 +152,7 @@ export function NativePhoneHeader({
                 compact
               />
             )}
-            {onMessageAgent ? (
-              <NativeCircleButton
-                icon={MessagesSquare}
-                onPress={onMessageAgent}
-                accessibilityLabel="Message agent"
-                testID="project-message-agent"
-              />
-            ) : null}
-            {showChatMoreCluster ? (
+            {showCluster ? (
               <View
                 className="flex-row items-center overflow-hidden rounded-full bg-transparent shadow-sm"
                 testID="project-native-chat-more-cluster"
@@ -164,12 +162,33 @@ export function NativePhoneHeader({
                 }}
               >
                 <LiquidGlassBackdrop style={{ borderRadius: 999 }} />
-                <NativeClusterIcon
-                  icon={MessageSquare}
-                  onPress={() => handleTabPress("chat-fullscreen")}
-                  accessibilityLabel="Chat"
-                  testID="project-native-chat"
-                />
+                {onMessageAgent ? (
+                  <NativeClusterIcon
+                    icon={MessagesSquare}
+                    onPress={onMessageAgent}
+                    accessibilityLabel="Message agent"
+                    testID="project-message-agent"
+                  />
+                ) : null}
+                {showContextIcon ? (
+                  onChat ? (
+                    <NativeClusterIcon
+                      icon={History}
+                      onPress={() => onOpenChatSessions?.()}
+                      accessibilityLabel={
+                        chatSessionsOpen ? "Hide chat history" : "Chat history"
+                      }
+                      testID="project-native-history"
+                    />
+                  ) : (
+                    <NativeClusterIcon
+                      icon={MessageSquare}
+                      onPress={() => handleTabPress("chat-fullscreen")}
+                      accessibilityLabel="Chat"
+                      testID="project-native-chat"
+                    />
+                  )
+                ) : null}
                 <NativeClusterIcon
                   icon={MoreHorizontal}
                   onPress={() => overlayState.setShowTabsSheet(true)}
