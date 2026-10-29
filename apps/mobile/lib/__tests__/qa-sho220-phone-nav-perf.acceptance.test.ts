@@ -386,10 +386,15 @@ describe('the phone chat composer lifts on a native transform', () => {
 describe('no navigator paints its default light background', () => {
   const root = read('app/_layout.tsx')
 
+  test('web and desktop keep the navigation library theme', () => {
+    expect(root).toMatch(/Platform\.OS === "web" \? \(\s*tree\s*\) : \(/)
+    expect(root).toMatch(/contentStyle: Platform\.OS === "web" \? undefined : \{ backgroundColor: canvas \}/)
+  })
+
   test('the root navigator theme and screens use the phone canvas', () => {
     expect(root).toMatch(/<NavigationThemeProvider value=\{navigationTheme\}>/)
     expect(root).toMatch(/colors: \{ \.\.\.base\.colors, background: canvas, card: canvas \}/)
-    expect(root).toMatch(/contentStyle: \{ backgroundColor: canvas \}/)
+    expect(root).toMatch(/backgroundColor: canvas/)
   })
 })
 
@@ -454,5 +459,25 @@ describe('a project reached from its own tab bar can always be left', () => {
     // Back pops to where the project was opened from, and falls back to Home.
     expect(surfaceHeader).toMatch(/router\.canGoBack\(\)\) router\.back\(\)/)
     expect(surfaceHeader).toMatch(/router\.replace\("\/\(app\)\/home"/)
+  })
+})
+
+describe('phone-only changes leave web and desktop as they were', () => {
+  const pressable = readFileSync(join(MOBILE, '../../packages/shared-ui/src/primitives/PressableScale.tsx'), 'utf8')
+  const meetings = read('app/(app)/meetings/index.tsx')
+  const settings = read('components/settings/ProjectSettingsContent.tsx')
+
+  test('the press dip is plain Pressable on web', () => {
+    expect(pressable).toMatch(/if \(Platform\.OS === 'web'\) \{\s*return <Pressable ref=\{ref\}/)
+  })
+
+  test('Meetings keeps its original header off a phone', () => {
+    expect(meetings).toMatch(/const Root = phone \? View : SafeAreaView/)
+    expect(meetings).toMatch(/phone \? <TabScreenHeader title="Meetings"/)
+    expect(meetings).toMatch(/Capture/)
+  })
+
+  test('project settings keep flex-1 off a phone', () => {
+    expect(settings).toMatch(/className=\{phone \? undefined : "flex-1"\}/)
   })
 })

@@ -221,8 +221,7 @@ function AuthenticatedAppShell({
     };
   }, [statusBarScheme, canvas]);
 
-  return (
-    <NavigationThemeProvider value={navigationTheme}>
+  const tree = (
     <ActiveInstanceProvider>
       {bare ? null : (
         <>
@@ -249,7 +248,7 @@ function AuthenticatedAppShell({
             screenOptions={{
               headerShown: false,
               lazy: true,
-              contentStyle: { backgroundColor: canvas },
+              contentStyle: Platform.OS === "web" ? undefined : { backgroundColor: canvas },
             }}
           >
             <Stack.Screen name="index" />
@@ -271,7 +270,12 @@ function AuthenticatedAppShell({
         {!bare && <EnvironmentBadge />}
       </BuddyLookProvider>
     </ActiveInstanceProvider>
-    </NavigationThemeProvider>
+  );
+  // Web and desktop keep the navigation library's own theme.
+  return Platform.OS === "web" ? (
+    tree
+  ) : (
+    <NavigationThemeProvider value={navigationTheme}>{tree}</NavigationThemeProvider>
   );
 }
 

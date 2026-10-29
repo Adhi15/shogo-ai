@@ -98,6 +98,11 @@ export const PressableScale = forwardRef<View, PressableScaleProps>(function Pre
     [onPressOut, spring],
   )
 
+  // The press dip is a touch affordance; web and desktop keep a plain Pressable.
+  if (Platform.OS === 'web') {
+    return <Pressable ref={ref} {...rest} disabled={disabled} onPressIn={onPressIn} onPressOut={onPressOut} style={style} />
+  }
+
   return (
     <AnimatedPressable
       ref={ref}
