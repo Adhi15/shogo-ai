@@ -421,6 +421,22 @@ describe('the phone workspace sheet lines its rows up', () => {
   })
 })
 
+describe("Home's Search messages and Browse channels draw a phone header", () => {
+  const layout = read('app/(app)/_layout.tsx')
+  const search = read('app/(app)/c/search.tsx')
+  const browse = read('app/(app)/c/index.tsx')
+
+  test('the legacy hamburger header is off for both on a phone', () => {
+    expect(layout).toMatch(/isTeamChatSubpage =\s*!isWide && !isIdeEmbed && isPhone && \/\\\/c\(\\\/search\)\?\\\/\?\$\/\.test\(pathname\)/)
+    expect(layout).toMatch(/isNewConversationPage \|\|\s*isTeamChatSubpage \|\|\s*isFloatingConversation/)
+  })
+
+  test('each draws its own header with a back arrow', () => {
+    expect(search).toMatch(/<TabScreenHeader title="Search messages" back \/>/)
+    expect(browse).toMatch(/<TabScreenHeader title="Team chat" back \/>/)
+  })
+})
+
 describe('a project reached from its own tab bar can always be left', () => {
   const shell = read('components/layout/MobileWorkspaceShell.tsx')
   const surfaceRoute = read('app/(app)/project-surface/[id].tsx')

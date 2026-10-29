@@ -317,6 +317,10 @@ function AppLayoutInner() {
   const isSettingsPage =
     pathname === "/settings" || pathname === "/(app)/settings";
   const isSearchPage = pathname === "/search" || pathname === "/(app)/search";
+  // "Search messages" and "Browse channels", opened from Home's lists, draw
+  // their own phone header with a back arrow.
+  const isTeamChatSubpage =
+    !isWide && !isIdeEmbed && isPhone && /\/c(\/search)?\/?$/.test(pathname);
   const isProjectChatsPage =
     pathname === "/project-chats" || pathname === "/(app)/project-chats";
   const isAIModelsPage =
@@ -494,6 +498,7 @@ function AppLayoutInner() {
     isOwnChromePage ||
     isTeamTabScreen ||
     isNewConversationPage ||
+    isTeamChatSubpage ||
     isFloatingConversation;
   // The companion mobile shell owns its own drawer and swipe gesture. Keep
   // the legacy sheet drawer inactive there so an edge swipe cannot reveal the
@@ -628,6 +633,7 @@ function AppLayoutInner() {
       (isHomePage ||
         isTeamTabScreen ||
         isSelfInsetPage ||
+        isTeamChatSubpage ||
         isMeetingsPage ||
         isSearchPage ||
         isAccountPage ||
