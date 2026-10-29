@@ -379,7 +379,7 @@ describe('the phone chat composer lifts on a native transform', () => {
   })
 
   test('the bottom nav stays mounted on iOS, where the keyboard covers it', () => {
-    expect(nav).toMatch(/keyboardOpen && Platform\.OS !== "ios"/)
+    expect(nav).toMatch(/keepsNavUnderKeyboard =\s*Platform\.OS === "ios" && !chrome\.overlay && isChatPanelPath\(pathname\)/)
   })
 })
 

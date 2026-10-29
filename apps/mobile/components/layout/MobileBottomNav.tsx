@@ -62,6 +62,11 @@ function isProjectPath(pathname: string) {
   return /\/(?:projects|project-chat|project-surface)\/[^/?]+/.test(pathname);
 }
 
+/** Screens whose composer is the shared chat panel, which lifts on a transform. */
+function isChatPanelPath(pathname: string) {
+  return isHomePath(pathname) || isProjectPath(pathname) || /\/agent\/?$/.test(pathname);
+}
+
 function isHomePath(pathname: string) {
   return (
     pathname === "/" || pathname === "/(app)" || pathname === "/(app)/index"
@@ -233,8 +238,13 @@ export function MobileBottomNav() {
   if (Platform.OS === "web" && width >= WEB_WIDE_MIN_WIDTH) return null;
   // iOS never resizes the window for the keyboard: it covers the nav, which can
   // stay where it is. Unmounting it on every keyboard event re-lays out the
-  // screen above it in the middle of the keyboard's animation.
-  if (isHiddenPath(pathname) || (keyboardOpen && Platform.OS !== "ios")) return null;
+  // screen above it in the middle of the keyboard's animation. Only the agent
+  // and project chats lift their composer by the keyboard's overlap, so they
+  // alone can leave it; any other screen sizes its composer from the space the
+  // nav leaves, and needs it gone to sit on the keyboard.
+  const keepsNavUnderKeyboard =
+    Platform.OS === "ios" && !chrome.overlay && isChatPanelPath(pathname);
+  if (isHiddenPath(pathname) || (keyboardOpen && !keepsNavUnderKeyboard)) return null;
 
   const goChat = () => {
     if (
