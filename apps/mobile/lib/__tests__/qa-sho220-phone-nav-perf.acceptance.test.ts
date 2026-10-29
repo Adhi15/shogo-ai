@@ -383,6 +383,16 @@ describe('the phone chat composer lifts on a native transform', () => {
   })
 })
 
+describe('no navigator paints its default light background', () => {
+  const root = read('app/_layout.tsx')
+
+  test('the root navigator theme and screens use the phone canvas', () => {
+    expect(root).toMatch(/<NavigationThemeProvider value=\{navigationTheme\}>/)
+    expect(root).toMatch(/colors: \{ \.\.\.base\.colors, background: canvas, card: canvas \}/)
+    expect(root).toMatch(/contentStyle: \{ backgroundColor: canvas \}/)
+  })
+})
+
 describe('a project reached from its own tab bar can always be left', () => {
   const shell = read('components/layout/MobileWorkspaceShell.tsx')
   const surfaceRoute = read('app/(app)/project-surface/[id].tsx')
