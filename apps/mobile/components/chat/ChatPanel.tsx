@@ -203,7 +203,10 @@ import {
 import { chatColumnStyle } from "../../lib/chat-column"
 import { NATIVE_COMPOSER_KEYBOARD_GAP } from "../../lib/native-composer-keyboard"
 import { ProjectComposerDock } from "./composer/ProjectComposerDock"
-import { useNativeComposerDockPad } from "../../lib/use-native-composer-keyboard"
+import {
+  useNativeComposerDockLift,
+  useNativeComposerDockPad,
+} from "../../lib/use-native-composer-keyboard"
 import { authClient } from "../../lib/auth-client"
 import { chatSessionEvents } from "../../lib/chat-session-events"
 import { useActiveInstance } from "../../contexts/active-instance"
@@ -1396,12 +1399,23 @@ const ChatPanelContent = observer(function ChatPanelContent({
       setSurfaceBottomOffset((prev) => (prev === next ? prev : next))
     })
   }, [])
+  // iOS phones slide the dock on a native transform and let the transcript's
+  // scroll view inset itself; nothing is laid out while the keyboard moves.
+  const liftComposerWithKeyboard = Platform.OS === "ios" && isNativePhoneLayout
+  const composerKeyboardLift = useNativeComposerDockLift({
+    enabled: liftComposerWithKeyboard,
+    restPad: restComposerPad,
+    bottomOffset: surfaceBottomOffset,
+    onOpenChange: setNativeKeyboardOpen,
+  })
   const composerKeyboardPad = useNativeComposerDockPad({
     measuredBottomOffset: measureSurfaceBottom ? surfaceBottomOffset : null,
     // Native phone uses the RN `Keyboard` bridge; mobile web has no such
     // bridge but tracks the same overlap via `visualViewport` (see
     // `use-native-composer-keyboard.ts`), so enable this for narrow web too.
-    enabled: isNativePhoneLayout || (Platform.OS === "web" && isPhoneViewport),
+    enabled:
+      !liftComposerWithKeyboard &&
+      (isNativePhoneLayout || (Platform.OS === "web" && isPhoneViewport)),
     restPad: restComposerPad,
     safeAreaBottom: insets.bottom,
     iosKeyboardAvoiding: iosComposerAvoiding,
@@ -8693,6 +8707,10 @@ const ChatPanelContent = observer(function ChatPanelContent({
                   // and then jump. Bouncing even when the chat is short lets an
                   // empty or one-message chat be dragged too.
                   keyboardDismissMode="on-drag"
+                  // The scroll view insets itself by however far the keyboard
+                  // covers it, natively and in step with the keyboard, so the
+                  // last message stays above the lifted composer.
+                  automaticallyAdjustKeyboardInsets={liftComposerWithKeyboard}
                   alwaysBounceVertical={Platform.OS === "ios"}
                   onTouchStart={(e) => {
                     if (Platform.OS === "web") return
@@ -8912,6 +8930,9 @@ const ChatPanelContent = observer(function ChatPanelContent({
                   presentation={presentation}
                   columnWidth={nativePhoneColumnWidth}
                   keyboardPad={composerKeyboardPad}
+                  keyboardLift={
+                    liftComposerWithKeyboard ? composerKeyboardLift : undefined
+                  }
                   keyboardOpen={nativeKeyboardOpen}
                   restPad={restComposerPad}
                   applyKeyboardPad={isPhoneViewport || isNativePhoneLayout}

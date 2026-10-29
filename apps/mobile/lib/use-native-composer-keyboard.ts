@@ -9,6 +9,8 @@ import {
   nativeComposerKeyboardOpenFromSource,
   nativeComposerKeyboardOverlap,
   NATIVE_COMPOSER_KEYBOARD_EASING,
+  NATIVE_COMPOSER_KEYBOARD_LIFT_DURATION,
+  NATIVE_COMPOSER_KEYBOARD_LIFT_EASING,
   webViewportKeyboardOverlap,
   type NativeComposerKeyboardEvent,
   type NativeComposerKeyboardSource,
@@ -19,6 +21,13 @@ const nativeComposerKeyboardEasingFn = Easing.bezier(
   NATIVE_COMPOSER_KEYBOARD_EASING[1],
   NATIVE_COMPOSER_KEYBOARD_EASING[2],
   NATIVE_COMPOSER_KEYBOARD_EASING[3],
+)
+
+const nativeComposerKeyboardLiftEasingFn = Easing.bezier(
+  NATIVE_COMPOSER_KEYBOARD_LIFT_EASING[0],
+  NATIVE_COMPOSER_KEYBOARD_LIFT_EASING[1],
+  NATIVE_COMPOSER_KEYBOARD_LIFT_EASING[2],
+  NATIVE_COMPOSER_KEYBOARD_LIFT_EASING[3],
 )
 
 export function nativeComposerKeyboardEasing() {
@@ -233,4 +242,61 @@ export function useNativeComposerDockPad({
   }, [pad, measuredBottomOffset])
 
   return pad
+}
+
+/**
+ * Lifts the phone chat composer with the keyboard without touching layout.
+ *
+ * The dock keeps its rest padding and slides on a native-driven transform, so
+ * the keyboard event costs one animation start on the JS thread and no React
+ * render or layout pass (the old padding tween re-laid out the whole chat on
+ * every frame and trailed the keyboard). The transcript follows through the
+ * scroll view's own keyboard inset.
+ *
+ * The lift is how far the keyboard rises above where the composer rests:
+ * `overlap - bottomOffset - restPad`, with `bottomOffset` the chrome under the
+ * chat surface (the bottom nav stays mounted while the keyboard covers it, so
+ * it does not move).
+ */
+export function useNativeComposerDockLift({
+  enabled,
+  restPad,
+  bottomOffset,
+  onOpenChange,
+}: {
+  enabled: boolean
+  restPad: number
+  /** Distance from the chat surface's bottom edge to the window's; null until measured. */
+  bottomOffset: number | null
+  /** Called when the keyboard has finished opening or closing. */
+  onOpenChange?: (open: boolean) => void
+}): Animated.Value {
+  const lift = useRef(new Animated.Value(0)).current
+  const restPadRef = useRef(restPad)
+  const offsetRef = useRef(bottomOffset)
+  const targetRef = useRef(0)
+  const onOpenChangeRef = useRef(onOpenChange)
+  restPadRef.current = restPad
+  offsetRef.current = bottomOffset
+  onOpenChangeRef.current = onOpenChange
+
+  useNativeComposerKeyboard(enabled, (event, source) => {
+    const rest = restPadRef.current
+    const overlap = nativeComposerKeyboardOverlapFromEvent(event)
+    const open = nativeComposerKeyboardOpenFromSource(source, overlap, rest)
+    if (open == null) return
+    const toValue = open ? -Math.max(0, overlap - (offsetRef.current ?? 0) - rest) : 0
+    if (toValue === targetRef.current) return
+    targetRef.current = toValue
+    Animated.timing(lift, {
+      toValue,
+      duration: NATIVE_COMPOSER_KEYBOARD_LIFT_DURATION,
+      easing: nativeComposerKeyboardLiftEasingFn,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) onOpenChangeRef.current?.(open)
+    })
+  })
+
+  return lift
 }

@@ -231,7 +231,10 @@ export function MobileBottomNav() {
   ]);
 
   if (Platform.OS === "web" && width >= WEB_WIDE_MIN_WIDTH) return null;
-  if (isHiddenPath(pathname) || keyboardOpen) return null;
+  // iOS never resizes the window for the keyboard: it covers the nav, which can
+  // stay where it is. Unmounting it on every keyboard event re-lays out the
+  // screen above it in the middle of the keyboard's animation.
+  if (isHiddenPath(pathname) || (keyboardOpen && Platform.OS !== "ios")) return null;
 
   const goChat = () => {
     if (

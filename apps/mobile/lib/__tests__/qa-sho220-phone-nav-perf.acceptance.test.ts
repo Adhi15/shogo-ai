@@ -349,6 +349,40 @@ describe('the composer rides the keyboard without relaying out the chat every fr
   })
 })
 
+describe('the phone chat composer lifts on a native transform', () => {
+  const hook = read('lib/use-native-composer-keyboard.ts')
+  const constants = read('lib/native-composer-keyboard.ts')
+  const panel = read('components/chat/ChatPanel.tsx')
+  const dock = read('components/chat/composer/ProjectComposerDock.tsx')
+  const nav = read('components/layout/MobileBottomNav.tsx')
+
+  test('the lift runs on the native driver with the measured keyboard curve', () => {
+    expect(hook).toMatch(/export function useNativeComposerDockLift/)
+    expect(hook).toMatch(/useNativeDriver: true/)
+    expect(hook).toMatch(/easing: nativeComposerKeyboardLiftEasingFn/)
+    expect(constants).toMatch(/NATIVE_COMPOSER_KEYBOARD_LIFT_EASING = \[0\.3, 0\.9, 0\.35, 1\]/)
+    expect(constants).toMatch(/NATIVE_COMPOSER_KEYBOARD_LIFT_DURATION = 360/)
+  })
+
+  test('the lift is the keyboard overlap minus the chrome under the chat and the rest pad', () => {
+    expect(hook).toMatch(/-Math\.max\(0, overlap - \(offsetRef\.current \?\? 0\) - rest\)/)
+  })
+
+  test('the dock slides on translateY instead of padding when lifting', () => {
+    expect(dock).toMatch(/transform: \[\{ translateY: keyboardLift \}\]/)
+    expect(dock).toMatch(/keyboardOpen && !keyboardLift\s*\? keyboardPad/)
+  })
+
+  test('the transcript follows through the scroll view keyboard inset', () => {
+    expect(panel).toMatch(/automaticallyAdjustKeyboardInsets=\{liftComposerWithKeyboard\}/)
+    expect(panel).toMatch(/!liftComposerWithKeyboard &&/)
+  })
+
+  test('the bottom nav stays mounted on iOS, where the keyboard covers it', () => {
+    expect(nav).toMatch(/keyboardOpen && Platform\.OS !== "ios"/)
+  })
+})
+
 describe('a project reached from its own tab bar can always be left', () => {
   const shell = read('components/layout/MobileWorkspaceShell.tsx')
   const surfaceRoute = read('app/(app)/project-surface/[id].tsx')

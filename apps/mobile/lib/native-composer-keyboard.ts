@@ -19,6 +19,15 @@ export const NATIVE_COMPOSER_KEYBOARD_DEFAULT_DURATION = 250;
 /** iOS keyboard curve (matches `keyboardWillShow` / ChatGPT dock). */
 export const NATIVE_COMPOSER_KEYBOARD_EASING = [0.17, 0.59, 0.4, 0.77] as const;
 
+/**
+ * The iOS keyboard's own rise, measured frame by frame from a 60 fps capture:
+ * half the travel in 60ms, 90% in 160ms, settled by 360ms. The reported
+ * `duration` (0.25s) is not that curve, and an ease tuned to it lets the
+ * keyboard overtake the composer mid-flight.
+ */
+export const NATIVE_COMPOSER_KEYBOARD_LIFT_EASING = [0.3, 0.9, 0.35, 1] as const;
+export const NATIVE_COMPOSER_KEYBOARD_LIFT_DURATION = 360;
+
 export type NativeComposerKeyboardSource = "show" | "hide" | "change";
 
 export type NativeComposerKeyboardEvent = {
