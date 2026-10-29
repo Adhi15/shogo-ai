@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Shogo Technologies, Inc.
 
 import { useEffect, useRef } from 'react'
-import { Animated, Dimensions, Easing, Keyboard, Platform } from 'react-native'
+import { Animated, Dimensions, Easing, Keyboard, LayoutAnimation, Platform } from 'react-native'
 import {
   nativeComposerDockBottomPad,
   nativeComposerKeyboardDuration,
@@ -156,6 +156,7 @@ export function useNativeComposerDockPad({
   const overlapRef = useRef(0)
   const avoidingRef = useRef(iosKeyboardAvoiding)
   const openRef = useRef(false)
+  const targetRef = useRef(restPad)
   const onOpenChangeRef = useRef(onOpenChange)
   restPadRef.current = restPad
   offsetRef.current = measuredBottomOffset
@@ -168,20 +169,40 @@ export function useNativeComposerDockPad({
     const overlap = nativeComposerKeyboardOverlapFromEvent(event)
     const keyboardOpen = nativeComposerKeyboardOpenFromSource(source, overlap, rest)
     if (keyboardOpen == null) return
+    const toValue = nativeComposerDockBottomPad({
+      keyboardOpen,
+      overlap,
+      restPad: rest,
+      safeAreaBottom,
+      measuredBottomOffset: offsetRef.current,
+      avoidingClearance: clearanceRef.current,
+      iosKeyboardAvoiding: avoidingRef.current,
+    })
+    const duration = nativeComposerKeyboardDuration(event.duration)
+    const moved = keyboardOpen !== openRef.current || toValue !== targetRef.current
     openRef.current = keyboardOpen
     overlapRef.current = overlap
+    targetRef.current = toValue
+    if (Platform.OS === 'ios' && !avoidingRef.current) {
+      // One layout commit, animated by UIKit on the keyboard's own curve. A
+      // JS-driven padding tween relays out the whole chat on every frame and
+      // trails the keyboard. `show` and `change` report the same frame, so
+      // only the first arms the animation; a spare one would leak onto the
+      // next unrelated layout.
+      if (moved) {
+        LayoutAnimation.configureNext({
+          duration,
+          update: { duration, type: LayoutAnimation.Types.keyboard },
+        })
+      }
+      onOpenChangeRef.current?.(keyboardOpen)
+      pad.setValue(toValue)
+      return
+    }
     onOpenChangeRef.current?.(keyboardOpen)
     Animated.timing(pad, {
-      toValue: nativeComposerDockBottomPad({
-        keyboardOpen,
-        overlap,
-        restPad: rest,
-        safeAreaBottom,
-        measuredBottomOffset: offsetRef.current,
-        avoidingClearance: clearanceRef.current,
-        iosKeyboardAvoiding: avoidingRef.current,
-      }),
-      duration: nativeComposerKeyboardDuration(event.duration),
+      toValue,
+      duration,
       easing: nativeComposerKeyboardEasing(),
       useNativeDriver: false,
     }).start()

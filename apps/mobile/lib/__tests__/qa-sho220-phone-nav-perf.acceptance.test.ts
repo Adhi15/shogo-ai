@@ -333,3 +333,18 @@ describe('the conversation list updates in place', () => {
     expect(next).toBe(list)
   })
 })
+
+describe('the composer rides the keyboard without relaying out the chat every frame', () => {
+  const hook = read('lib/use-native-composer-keyboard.ts')
+
+  test('iOS lifts the dock in one layout commit on the keyboard curve', () => {
+    expect(hook).toMatch(/LayoutAnimation\.configureNext/)
+    expect(hook).toMatch(/type: LayoutAnimation\.Types\.keyboard/)
+    expect(hook).toMatch(/pad\.setValue\(toValue\)/)
+  })
+
+  test('a repeated keyboard frame does not arm a second animation', () => {
+    expect(hook).toMatch(/const moved = keyboardOpen !== openRef\.current \|\| toValue !== targetRef\.current/)
+    expect(hook).toMatch(/if \(moved\) \{\s*LayoutAnimation\.configureNext/)
+  })
+})
