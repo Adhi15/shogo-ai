@@ -4,6 +4,7 @@
 import React from "react";
 import { Pressable } from "react-native";
 import { cn } from "@shogo/shared-ui/primitives";
+import { NATIVE_ACTIVE_PILL_SHADOW } from "../../../../lib/native-active-shadow";
 import { LiquidGlassBackdrop } from "../../../ui/LiquidGlassBackdrop";
 import {
   NATIVE_PHONE_CONTROL_SIZE,
@@ -41,12 +42,15 @@ export function NativeCircleButton({
         "items-center justify-center rounded-full",
         active && "bg-primary",
         flat && !active && "bg-muted",
-        glass && "overflow-hidden bg-transparent shadow-sm",
+        glass && "overflow-hidden bg-transparent",
       )}
-      style={{
-        width: NATIVE_PHONE_CONTROL_SIZE,
-        height: NATIVE_PHONE_CONTROL_SIZE,
-      }}
+      style={[
+        {
+          width: NATIVE_PHONE_CONTROL_SIZE,
+          height: NATIVE_PHONE_CONTROL_SIZE,
+        },
+        glass ? NATIVE_ACTIVE_PILL_SHADOW : undefined,
+      ]}
     >
       {glass ? (
         <LiquidGlassBackdrop

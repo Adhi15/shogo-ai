@@ -290,8 +290,8 @@ export default function MeetingsScreen() {
           </View>
         )}
 
-        {/* Nothing to search until there is a meeting (or a query to clear). */}
-        {(meetings.length > 0 || !!query) && (
+        {/* On a phone there is nothing to search until there is a meeting (or a query to clear). */}
+        {(!phone || meetings.length > 0 || !!query) && (
         <View className="mt-4 flex-row items-center gap-2 rounded-xl border border-border/70 bg-background px-3">
           <Search size={14} className="text-muted-foreground" />
           <TextInput

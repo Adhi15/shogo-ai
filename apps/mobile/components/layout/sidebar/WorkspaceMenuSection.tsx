@@ -589,7 +589,7 @@ export function WorkspaceMenuSection({
       )}
       {busyElsewhere > 0 && (
         <Text
-          className={cn(density.text.caption, "px-4 pb-3 text-muted-foreground")}
+          className={cn(density.text.caption, "px-4 text-muted-foreground", isNative ? "pb-3" : "pb-1")}
           accessibilityLabel={`Working in ${busyElsewhere} other ${busyElsewhere === 1 ? "workspace" : "workspaces"}`}
         >
           Working in {busyElsewhere} other {busyElsewhere === 1 ? "workspace" : "workspaces"}
