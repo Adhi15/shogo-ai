@@ -23,9 +23,11 @@ import { ContextMenu, type MenuEntry } from "./ContextMenu";
 import { useGitStatusContext } from "./git/GitStatusContext";
 import type { GitShortCode } from "./git/bridge";
 import { computeDropZone } from "./file-tree-drop-zone";
+import { isOsFileDrag } from "./os-drop";
 import { buildCompactFolderChain } from "./explorer-compact-folders";
 import { useDragAutoScroll } from "./useDragAutoScroll";
 import { renameSelectionEnd, validateEntryName } from "./entry-name";
+import { AGENT_ROOT_ID, CHAT_REFS_MIME, encodeChatDragPayload, type ChatDragItem } from "../../../../lib/chat-drag";
 
 export interface FileTreeHandlers {
   /** `preview: true` = single-click open (replaceable tab); omitted = keep the tab. */
@@ -53,10 +55,16 @@ export interface FileTreeHandlers {
   onOpenToSide?: (node: TreeNode) => void;
   /** Open the Search view restricted to a folder ("Find in Folder…"). */
   onFindInFolder?: (node: TreeNode) => void;
-  /** Files dragged in from the OS; `dest` null = workspace root. */
-  onUploadFiles?: (files: File[], dest: TreeNode | null) => void;
   /** Absolute filesystem path for "Copy Path" (null when unknown, e.g. cloud). */
   absolutePath?: (node: TreeNode) => string | null;
+  /** "Add to Chat" from the context menu; only agent-workspace nodes can be referenced. */
+  onAddToChat?: (nodes: TreeNode[]) => void;
+  /** True when the file is open with unsaved editor changes. */
+  isDirty?: (rootId: string, path: string) => boolean;
+  /** A drag that landed on the chat composer included files with unsaved changes. */
+  onDraggedToChatWithUnsaved?: (names: string[]) => void;
+  /** The tree's current (multi-)selection, e.g. for "Explorer: Add to Chat". */
+  onSelectionChange?: (nodes: TreeNode[]) => void;
 }
 
 type FlatRow =
@@ -111,30 +119,6 @@ function flatten(
 function parentOf(path: string): string {
   const i = path.lastIndexOf("/");
   return i < 0 ? "" : path.slice(0, i);
-}
-
-/** Real files dragged in from the OS (not in-app tree drags, not folders). */
-function osFilesFrom(dt: DataTransfer): File[] {
-  if (Array.from(dt.types ?? []).includes("application/x-ide-path")) return [];
-  const out: File[] = [];
-  const items = Array.from(dt.items ?? []);
-  if (items.length > 0) {
-    for (const it of items) {
-      if (it.kind !== "file") continue;
-      const entry = (it as DataTransferItem & { webkitGetAsEntry?: () => { isDirectory?: boolean } | null }).webkitGetAsEntry?.();
-      if (entry?.isDirectory) continue;
-      const f = it.getAsFile();
-      if (f) out.push(f);
-    }
-    return out;
-  }
-  return Array.from(dt.files ?? []);
-}
-
-/** Directory node that contains `node` (null = workspace root). */
-function findParentDir(tree: TreeNode[], node: TreeNode): TreeNode | null {
-  const p = parentOf(node.path);
-  return p === "" ? null : findDirNode(tree, node.rootId, p);
 }
 
 /** Stable key used across the selection state (root-aware so folder names
@@ -214,6 +198,8 @@ export function FileTree({
   const [menu, setMenu] = useState<{ x: number; y: number; node: TreeNode | null } | null>(null);
   /** Explorer clipboard (Cut / Copy → Paste). Internal to the tree. */
   const [clipboard, setClipboard] = useState<{ nodes: TreeNode[]; mode: "copy" | "cut" } | null>(null);
+  /** Names of dirty files in the drag in progress (see onDragEnd). */
+  const draggedDirtyRef = useRef<string[]>([]);
   const cutKeys = useMemo(
     () => (clipboard?.mode === "cut" ? new Set(clipboard.nodes.map(keyOf)) : null),
     [clipboard],
@@ -585,6 +571,17 @@ export function FileTree({
     return out;
   }, [multiSelected, visibleNodes]);
 
+  const onSelectionChange = handlers.onSelectionChange;
+  useEffect(() => {
+    if (!onSelectionChange) return;
+    if (selectedNodes.length > 0) {
+      onSelectionChange(selectedNodes);
+      return;
+    }
+    const single = selected ? visibleNodes.find((n) => n.path === selected && !n.isRoot) : undefined;
+    onSelectionChange(single ? [single] : []);
+  }, [onSelectionChange, selected, selectedNodes, visibleNodes]);
+
   const handleDelete = async (node: TreeNode) => {
     // Batch delete path: if the clicked node is part of a multi-selection of
     // >1 entries, confirm once and delete all (files + folders). Otherwise
@@ -644,8 +641,13 @@ export function FileTree({
       }
 
       if (meta) {
+        // Auto-reveal of the active editor clears the multi-selection but keeps
+        // the focused row; Ctrl/Cmd-click extends from it, as in VS Code.
+        const focused = selected && selected !== node.path
+          ? visibleNodes.find((n) => n.path === selected && !n.isRoot)
+          : undefined;
         setMultiSelected((prev) => {
-          const next = new Set(prev);
+          const next = new Set(prev.size === 0 && focused ? [keyOf(focused)] : prev);
           if (next.has(k)) next.delete(k);
           else next.add(k);
           return next;
@@ -661,7 +663,7 @@ export function FileTree({
       if (node.kind === "dir") toggleDir(node);
       else handlers.onOpen(node, { preview: true });
     },
-    [visibleNodes, toggleDir, handlers],
+    [visibleNodes, selected, toggleDir, handlers],
   );
 
   // Type-to-jump buffer (VS Code "type to navigate"): typing letters quickly
@@ -821,6 +823,20 @@ export function FileTree({
     return () => window.removeEventListener("keydown", onKey);
   }, [visibleNodes, visibleRows, selected, expanded, renaming, creating, handlers, expand, toggle, toggleDir, multiSelected, openSelected, selectedNodes, clipboard, copyToClipboard, pasteInto, scrollRowIntoView]);
 
+  const addToChatEntry = (nodes: TreeNode[]): MenuEntry[] => {
+    if (!handlers.onAddToChat) return [];
+    const referable = nodes.filter((n) => !n.isRoot && n.rootId === AGENT_ROOT_ID);
+    return [
+      {
+        label: "Add to Chat",
+        disabled: referable.length === 0,
+        hint: referable.length === 0 ? "Only project workspace files can be referenced" : undefined,
+        onClick: () => handlers.onAddToChat?.(nodes.filter((n) => !n.isRoot)),
+      },
+      { separator: true },
+    ];
+  };
+
   const menuItems = (node: TreeNode | null): MenuEntry[] => {
     const defaultRootId = tree[0]?.rootId ?? "agent";
     if (!node) {
@@ -843,6 +859,7 @@ export function FileTree({
       const count = multiSelected.size;
       const fileCount = selectedNodes.filter((n) => n.kind === "file").length;
       return [
+        ...addToChatEntry(selectedNodes),
         ...(fileCount > 0
           ? [
               {
@@ -950,6 +967,7 @@ export function FileTree({
       ];
     }
     return [
+      ...addToChatEntry([node]),
       ...creation,
       {
         label: node.kind === "file" ? "Open" : expanded.has(node.path) ? "Collapse" : "Expand",
@@ -1072,6 +1090,7 @@ export function FileTree({
         if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
         dragActiveRef.current = false;
         autoScroll.stop();
+        setDropTarget(null);
       }}
       onDrop={() => {
         dragActiveRef.current = false;
@@ -1211,12 +1230,38 @@ export function FileTree({
             onDragStart={(e) => {
               e.dataTransfer.setData("application/x-ide-path", node.path);
               e.dataTransfer.setData("application/x-ide-root", node.rootId);
-              e.dataTransfer.effectAllowed = "move";
+              // Dragging a node that's part of a multi-selection drags the selection.
+              const dragged = (multiSelected.size > 1 && multiSelected.has(keyOf(node)) ? selectedNodes : [node])
+                .filter((n) => !n.isRoot);
+              const items: ChatDragItem[] = dragged.map((n) => ({
+                kind: n.kind === "dir" ? "folder" : "file",
+                path: n.path,
+                name: n.name,
+                rootId: n.rootId,
+                dirty: n.kind === "file" ? handlers.isDirty?.(n.rootId, n.path) ?? false : false,
+              }));
+              e.dataTransfer.setData(CHAT_REFS_MIME, encodeChatDragPayload(items));
+              draggedDirtyRef.current = items.filter((i) => i.dirty).map((i) => i.name);
+              // In-tree drop targets still ask for "move"; the chat composer asks for "copy".
+              e.dataTransfer.effectAllowed = "copyMove";
+            }}
+            onDragEnd={(e) => {
+              const dirty = draggedDirtyRef.current;
+              draggedDirtyRef.current = [];
+              if (e.dataTransfer.dropEffect === "copy" && dirty.length > 0) {
+                handlers.onDraggedToChatWithUnsaved?.(dirty);
+              }
             }}
             onDragOver={(e) => {
-              const isOs = e.dataTransfer.types.includes("Files") && !!handlers.onUploadFiles;
+              const isOs = isOsFileDrag(e.dataTransfer);
               if (node.kind !== "dir") {
-                if (isOs) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }
+                if (isOs) {
+                  // A drop on a file row lands in that file's folder — light
+                  // up the folder row so the destination is visible.
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "copy";
+                  setDropTarget(parentOf(node.path));
+                }
                 return;
               }
               e.preventDefault();
@@ -1225,14 +1270,11 @@ export function FileTree({
             }}
             onDragLeave={() => setDropTarget((p) => (p === node.path ? null : p))}
             onDrop={(e) => {
+              // OS-file drops are handled once, by the Workbench-level drop
+              // zone (see os-drop-zone.ts) — the tree only owns in-app moves.
+              if (isOsFileDrag(e.dataTransfer)) return;
               e.preventDefault();
               setDropTarget(null);
-              const external = osFilesFrom(e.dataTransfer);
-              if (external.length > 0 && handlers.onUploadFiles) {
-                e.stopPropagation();
-                handlers.onUploadFiles(external, node.kind === "dir" ? node : (findParentDir(tree, node) ?? null));
-                return;
-              }
               if (node.kind !== "dir") return;
               const src = e.dataTransfer.getData("application/x-ide-path");
               const srcRoot = e.dataTransfer.getData("application/x-ide-root");
@@ -1248,6 +1290,8 @@ export function FileTree({
             }}
             onContextMenu={(e) => openContextMenu(e, node)}
             data-tree-path={node.path}
+            data-tree-kind={node.kind}
+            data-tree-root={node.rootId}
             role="treeitem"
             aria-level={depth + 1}
             aria-selected={isSelected || isMulti}
@@ -1315,18 +1359,15 @@ export function FileTree({
         className="min-h-[40px]"
         onDragOver={(e) => {
           e.preventDefault();
-          e.dataTransfer.dropEffect = e.dataTransfer.types.includes("Files") ? "copy" : "move";
+          e.dataTransfer.dropEffect = isOsFileDrag(e.dataTransfer) ? "copy" : "move";
           setDropTarget("__root__");
         }}
         onDragLeave={() => setDropTarget((p) => (p === "__root__" ? null : p))}
         onDrop={(e) => {
+          // OS-file drops go through the Workbench-level drop zone.
+          if (isOsFileDrag(e.dataTransfer)) return;
           e.preventDefault();
           setDropTarget(null);
-          const external = osFilesFrom(e.dataTransfer);
-          if (external.length > 0 && handlers.onUploadFiles) {
-            handlers.onUploadFiles(external, null);
-            return;
-          }
           const src = e.dataTransfer.getData("application/x-ide-path");
           if (!src) return;
           const srcNode = findNode(tree, src);

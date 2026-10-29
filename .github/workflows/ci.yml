@@ -356,6 +356,13 @@ jobs:
         if: needs.prelude.outputs.verified != 'true'
         run: bun run lint
 
+      # Unit tests run with the other packages (apps/shogo-ide in TEST_PACKAGES).
+      - name: Shogo Code extension (typecheck, phase checks)
+        run: |
+          bun run --cwd apps/shogo-ide extension:typecheck
+          node apps/shogo-ide/scripts/phase1-check.mjs
+          node apps/shogo-ide/scripts/phase3-check.mjs
+
       - name: Check CI `bun install` steps authenticate ripgrep-prebuilt
         if: needs.prelude.outputs.verified != 'true'
         # Guards against the `@vscode/ripgrep` 403 flake — see
@@ -676,6 +683,10 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
+      # The phone specs (`PHONE_SPECS` in the config, the `iphone-15-pro` and
+      # `pixel-7` projects) are testIgnore'd by `--project=chromium` and run in
+      # .github/workflows/e2e-phone.yml, which installs WebKit. Do not add those
+      # projects here: this job has no WebKit and no room in its cap (SHO-222).
       - name: Run e2e/local
         if: ${{ !matrix.spec }}
         env:
@@ -819,7 +830,7 @@ jobs:
             desktop_bundle: false
             include_e2e: false
           - name: remaining + e2e
-            packages: packages/shared-runtime,packages/model-catalog,packages/authz,packages/sdk,scripts,packages/shared-app,apps/metal-agent,packages/agent,packages/core,packages/email,packages/voice,apps/desktop
+            packages: packages/shared-runtime,packages/model-catalog,packages/authz,packages/sdk,scripts,packages/shared-app,apps/metal-agent,apps/shogo-ide,packages/agent,packages/core,packages/email,packages/voice,apps/desktop
             shard: ''
             build_templates: true
             desktop_bundle: true

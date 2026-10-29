@@ -57,6 +57,7 @@ import {
   writePoolPreseedManifest,
 } from './workspace-pool-adopt'
 import { LiveTurnGate } from './live-turn-wait'
+import type { TurnOrigin } from './gateway'
 import {
   createRuntimeApp, traceOperation,
   initializeS3Sync,
@@ -2037,6 +2038,14 @@ app.post('/agent/chat', async (c) => {
   if (Array.isArray(wokenByTasks)) {
     agentGateway!.acknowledgeTaskNotification(chatSessionKey, wokenByTasks.filter((id): id is string => typeof id === 'string'))
   }
+  // What started this turn: only a person writing clears the session's one
+  // automatic restart (SHO-227). The queue stamps `autoResume` on the row it
+  // creates for a resume, and a wake is recognisable by the tasks it names.
+  const turnOrigin: TurnOrigin = Array.isArray(wokenByTasks)
+    ? 'task-wake'
+    : body.autoResume === true
+      ? 'resume'
+      : 'person'
   // What this session is still holding (a pause and the updates behind it) is
   // part of this turn's prompt, so read it before the prompt is assembled.
   await agentGateway!.refreshWakeState(chatSessionKey).catch(() => {})
@@ -2154,6 +2163,7 @@ app.post('/agent/chat', async (c) => {
       dualPlan,
       chatSessionId: chatSessionKey,
       chatContext,
+      turnOrigin,
     })
 
     const usage = agentGateway!.consumeLastTurnUsage()
@@ -3778,19 +3788,28 @@ app.post('/preview/watch/resume', (c) => {
 // `PtySessionManager.create()` — these routes just surface the state
 // to the desktop UI so the external-preview tab can offer a one-click
 // "Open this URL" affordance.
+//
+// Detections are per project (`?project=<id>`): a workspace runtime serves
+// several projects, and a URL printed in one project's terminal must never
+// surface as another's (SHO-200 S6). Without the parameter nothing is
+// returned rather than someone else's URL.
 // ──────────────────────────────────────────────────────────────────────
 
 app.get('/preview/detected-urls', (c) => {
-  const { listAllDetections, getMostRecentDetection } = require('./detected-urls') as typeof import('./detected-urls')
+  const { listDetectionsForProject, getMostRecentDetectionForProject } =
+    require('./detected-urls') as typeof import('./detected-urls')
+  const projectId = c.req.query('project') || null
   return c.json({
-    detections: listAllDetections(),
-    mostRecent: getMostRecentDetection(),
+    projectId,
+    detections: projectId ? listDetectionsForProject(projectId) : [],
+    mostRecent: projectId ? getMostRecentDetectionForProject(projectId) : null,
   })
 })
 
 app.get('/preview/detected-urls/stream', (c) => {
-  const { listAllDetections, getMostRecentDetection, onDetectedUrl } =
+  const { listDetectionsForProject, getMostRecentDetectionForProject, onDetectedUrl } =
     require('./detected-urls') as typeof import('./detected-urls')
+  const projectId = c.req.query('project') || null
 
   const stream = new ReadableStream({
     start(controller) {
@@ -3801,10 +3820,13 @@ app.get('/preview/detected-urls/stream', (c) => {
         } catch {}
       }
       send('snapshot', {
-        detections: listAllDetections(),
-        mostRecent: getMostRecentDetection(),
+        projectId,
+        detections: projectId ? listDetectionsForProject(projectId) : [],
+        mostRecent: projectId ? getMostRecentDetectionForProject(projectId) : null,
       })
       const unsubscribe = onDetectedUrl((detection) => {
+        if (!projectId) return
+        if (detection.projectId !== projectId) return
         send('detected', detection)
       })
       c.req.raw.signal.addEventListener('abort', () => {
