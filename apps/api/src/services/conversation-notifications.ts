@@ -209,35 +209,23 @@ async function notificationText(text: string, workspaceId: string): Promise<stri
   return markdownToPlainText(renderMentionsAsText(text, await loadMentionNames(workspaceId, [text])))
 }
 
-/** Group DMs have no name, so the banner names who is in the group (first three, then a count). */
-async function groupDmLabel(conversationId: string): Promise<string> {
-  const members = await db.conversationMember.findMany({
-    where: { conversationId, memberType: 'user', userId: { not: null } },
-    select: { user: { select: { name: true, email: true } } },
-    orderBy: { createdAt: 'asc' },
-  })
-  const names: string[] = members
-    .map((m: any) => (m.user?.name?.trim() || m.user?.email || '').split(' ')[0])
-    .filter(Boolean)
-  const shown = names.slice(0, 3).join(', ')
-  const rest = names.length - 3
-  return `group chat (${shown}${rest > 0 ? ` +${rest}` : ''})`
+/** First name, or the email when a person has none. */
+function firstNameOf(user: { name?: string | null; email?: string | null } | null | undefined): string {
+  return (user?.name?.trim() || user?.email || '').split(' ')[0]
 }
 
-const PUSH_REASON_LABELS: Record<string, string> = {
-  dm: 'Direct message',
-  mention: 'Mentioned you',
-  broadcast: 'Mentioned you',
-  thread: 'Thread reply',
-}
+const GROUP_NAMES_SHOWN = 2
 
 /**
- * The phone shows a push as-is, so it carries the reason itself ("Mentioned you · ada in #general").
- * Open clients get the plain title and add the same label locally.
+ * A group DM has no name, so its banner names the other people in it, the way the
+ * sidebar lists them: everyone but the sender and the person being alerted.
+ * Kept short because iOS cuts a push title off at about 30 characters.
  */
-function pushTitleFor(reason: string, title: string): string {
-  const label = PUSH_REASON_LABELS[reason]
-  return label ? `${label} · ${title}` : title
+function groupDmLabel(members: Array<{ userId: string; first: string }>, authorUserId: string | null, recipientId: string): string | null {
+  const others = members.filter((m) => m.userId !== authorUserId && m.userId !== recipientId && m.first).map((m) => m.first)
+  if (!others.length) return null
+  const rest = others.length - GROUP_NAMES_SHOWN
+  return `group with ${others.slice(0, GROUP_NAMES_SHOWN).join(', ')}${rest > 0 ? ` +${rest}` : ''}`
 }
 
 async function describe(result: PostMessageResult) {
@@ -248,11 +236,24 @@ async function describe(result: PostMessageResult) {
   const text = await notificationText(row.text ?? '', conversation.workspaceId)
   const attachments = row.attachments?.length ? `📎 ${row.attachments.length} file${row.attachments.length > 1 ? 's' : ''}` : ''
   const body = (text || attachments || 'New message').slice(0, BODY_CHARS)
-  const where = conversation.kind === 'group_dm'
-    ? await groupDmLabel(conversation.id)
-    : isDirect(conversation.kind) ? null : `#${conversation.slug ?? conversation.name ?? 'channel'}`
-  const title = !where ? author : row.threadRootId ? `${author} replied in ${where}` : `${author} in ${where}`
-  return { title, body }
+  const verb = row.threadRootId ? 'replied in' : 'in'
+  if (conversation.kind === 'group_dm') {
+    const members: Array<{ userId: string; first: string }> = (await db.conversationMember.findMany({
+      where: { conversationId: conversation.id, memberType: 'user', userId: { not: null } },
+      select: { userId: true, user: { select: { name: true, email: true } } },
+      orderBy: { createdAt: 'asc' },
+    })).map((m: any) => ({ userId: m.userId, first: firstNameOf(m.user) }))
+    const who = members.find((m) => m.userId === row.authorUserId)?.first || author
+    // Each person sees the group as the others in it, so the title depends on who is alerted.
+    const titleFor = (userId: string) => {
+      const where = groupDmLabel(members, row.authorUserId ?? null, userId)
+      return where ? `${who} ${verb} ${where}` : author
+    }
+    return { titleFor, body }
+  }
+  const where = isDirect(conversation.kind) ? null : `#${conversation.slug ?? conversation.name ?? 'channel'}`
+  const title = !where ? author : `${author} ${verb} ${where}`
+  return { titleFor: () => title, body }
 }
 
 export async function notifyForMessage(result: PostMessageResult): Promise<NotificationRecipient[]> {
@@ -260,7 +261,7 @@ export async function notifyForMessage(result: PostMessageResult): Promise<Notif
   const recipients = await resolveRecipients(result)
   if (!recipients.length) return []
   const { row, conversation } = result
-  const { title, body } = await describe(result)
+  const { titleFor, body } = await describe(result)
   const presence = await getPresence(conversation.workspaceId, recipients.map((r) => r.userId))
   const approval = approvalPushFor(row)
   const data = {
@@ -279,12 +280,13 @@ export async function notifyForMessage(result: PostMessageResult): Promise<Notif
       conversationId: conversation.id,
       messageId: row.id,
       actorUserId: row.authorUserId ?? null,
-      title,
+      title: titleFor(r.userId),
       preview: body,
     })))
 
   for (const { userId, reason, silenced, messageSound, mobilePushDelay = 'inactive' } of recipients) {
     if (silenced) continue
+    const title = titleFor(userId)
     // The phone plays the system sound only when the person wants message sounds.
     const sound: 'default' | null = messageSound === 'off' ? null : 'default'
     // Every open client gets the alert and decides locally whether to show it
@@ -318,7 +320,7 @@ export async function notifyForMessage(result: PostMessageResult): Promise<Notif
     if (lastPush.size > 10_000) {
       for (const [k, t] of lastPush) if (now - t >= PUSH_COALESCE_MS) lastPush.delete(k)
     }
-    const payload = { title: pushTitleFor(reason, title), body, type: 'channel-message' as const, channelId: 'messages', audience: 'chat' as const, sound, data: { ...data, reason } }
+    const payload = { title, body, type: 'channel-message' as const, channelId: 'messages', audience: 'chat' as const, sound, data: { ...data, reason } }
     const wait = PUSH_DELAY_MS[mobilePushDelay]
     if (wait > 0) {
       scheduleDelayedPush(userId, conversation.id, conversation.workspaceId, wait, payload)
