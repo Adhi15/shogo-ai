@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Animated, Easing, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
-import { Archive, Bell, BellOff, Bot, Check, ChevronLeft, FileText, FolderOpen, Hash, Lock, LogOut, MoreHorizontal, Paperclip, Pencil, PanelRight, Pin, Radio, Sparkles, Star, Trash2, UserCircle, UserPlus, Users, X } from 'lucide-react-native'
+import { Archive, Bell, BellOff, Bot, Check, ChevronLeft, ChevronRight, FileText, FolderOpen, Hash, Lock, LogOut, MoreHorizontal, Paperclip, Pencil, PanelRight, Pin, Radio, Sparkles, Star, Trash2, UserCircle, UserPlus, Users, X } from 'lucide-react-native'
 import { cn } from '@shogo/shared-ui/primitives'
 import { LiquidGlassBackdrop } from '../ui/LiquidGlassBackdrop'
 import { CHROME_SIZE, GlassButton, GlassChip } from './FloatingChrome'
@@ -108,9 +108,9 @@ export function ConversationHeader({ conversation, mentionables, me, onChanged, 
   useEffect(() => {
     if (detailsOpen) {
       setPanelMounted(true)
-      Animated.timing(panel, { toValue: 1, duration: 320, easing: Easing.bezier(0.2, 0.9, 0.25, 1), useNativeDriver: false }).start()
+      Animated.timing(panel, { toValue: 1, duration: 240, easing: Easing.bezier(0.2, 0.9, 0.25, 1), useNativeDriver: false }).start()
     } else {
-      Animated.timing(panel, { toValue: 0, duration: 220, easing: Easing.bezier(0.4, 0, 0.2, 1), useNativeDriver: false }).start((result) => {
+      Animated.timing(panel, { toValue: 0, duration: 190, easing: Easing.bezier(0.4, 0, 0.2, 1), useNativeDriver: false }).start((result) => {
         // An interrupted close (reopened mid-way) must keep the panel mounted.
         if (!result || result.finished) setPanelMounted(false)
       })
@@ -439,17 +439,19 @@ export function ConversationHeader({ conversation, mentionables, me, onChanged, 
     const chipKeys = ['star', 'notify', 'members']
     const chips = actions.filter((a) => chipKeys.includes(a.key))
     const listed = actions.filter((a) => a.key !== 'catchup' && !chipKeys.includes(a.key))
-    const chipLabel: Record<string, string> = { star: conversation.starred ? 'Starred' : 'Star', notify: 'Notify', members: 'Members' }
+    const chipLabel: Record<string, string> = { star: conversation.starred ? 'Starred' : 'Star', notify: 'Notify', members: 'Add' }
     const closeDetails = () => setDetailsOpen(false)
     // Open to the content's height, until the keyboard-safe edge of the screen.
     const panelMax = windowHeight - insets.top - insets.bottom - 24
-    const panelHeight = panelContentHeight ? Math.min(panelContentHeight, panelMax) : panelMax
+    const panelHeight = panelContentHeight ? Math.min(CHROME_SIZE + panelContentHeight, panelMax) : panelMax
     // Tab rows only switch views, so they need not wait out the modal's dismissal like the actions do.
     const selectTab = (run: () => void) => {
       closeDetails()
       run()
     }
     const catchUpAction = actions.find((a) => a.key === 'catchup')!
+    // The rest of the header fades out as the panel takes its place.
+    const chromeOpacity = panel.interpolate({ inputRange: [0, 0.5], outputRange: [1, 0], extrapolate: 'clamp' })
     return (
       <View
         pointerEvents="box-none"
@@ -459,9 +461,11 @@ export function ConversationHeader({ conversation, mentionables, me, onChanged, 
         testID="floating-conversation-header"
       >
         <View pointerEvents="box-none" className="flex-row items-center gap-2">
-          <GlassButton label="Back" onPress={onBack}>
-            <ChevronLeft size={22} className="text-foreground" />
-          </GlassButton>
+          <Animated.View style={{ opacity: chromeOpacity }} pointerEvents={panelMounted ? 'none' : 'auto'}>
+            <GlassButton label="Back" onPress={onBack}>
+              <ChevronLeft size={22} className="text-foreground" />
+            </GlassButton>
+          </Animated.View>
           <Pressable
             onPress={() => setDetailsOpen(true)}
             accessibilityRole="button"
@@ -471,31 +475,40 @@ export function ConversationHeader({ conversation, mentionables, me, onChanged, 
             onLayout={(e) => setPillBox({ x: e.nativeEvent.layout.x, width: e.nativeEvent.layout.width })}
           >
             <LiquidGlassBackdrop style={{ borderRadius: CHROME_SIZE / 2 }} />
-            <View className="flex-row items-center gap-1.5">
-              {leading}
-              <Text className="flex-shrink text-[15px] font-semibold text-foreground" numberOfLines={1}>
-                {title}
-              </Text>
+            {/* The open panel draws its own copy of the title, so this one steps aside. */}
+            <View style={{ opacity: panelMounted ? 0 : 1 }}>
+              <View className="flex-row items-center gap-1.5">
+                {leading}
+                <Text className="flex-shrink text-[15px] font-semibold text-foreground" numberOfLines={1}>
+                  {title}
+                </Text>
+              </View>
+              {subtitle ? (
+                <Text className="text-[11px] text-muted-foreground" numberOfLines={1}>
+                  {subtitle}
+                </Text>
+              ) : null}
             </View>
-            {subtitle ? (
-              <Text className="text-[11px] text-muted-foreground" numberOfLines={1}>
-                {subtitle}
-              </Text>
-            ) : null}
           </Pressable>
           <View className="flex-1" pointerEvents="none" />
-          {agentProjectId ? (
-            <GlassButton label="Open project" onPress={openProject}>
-              <FolderOpen size={18} className="text-foreground" />
+          <Animated.View
+            className="flex-row items-center gap-2"
+            style={{ opacity: chromeOpacity }}
+            pointerEvents={panelMounted ? 'none' : 'box-none'}
+          >
+            {agentProjectId ? (
+              <GlassButton label="Open project" onPress={openProject}>
+                <FolderOpen size={18} className="text-foreground" />
+              </GlassButton>
+            ) : null}
+            <HuddleButton conversation={conversation} me={me} label={title} floating />
+            <GlassButton label={catchUpAction.label} onPress={catchUpAction.onPress}>
+              {catchUpAction.icon(18)}
             </GlassButton>
-          ) : null}
-          <HuddleButton conversation={conversation} me={me} label={title} floating />
-          <GlassButton label={catchUpAction.label} onPress={catchUpAction.onPress}>
-            {catchUpAction.icon(18)}
-          </GlassButton>
-          <GlassButton label="More actions" onPress={() => setDetailsOpen(true)}>
-            <MoreHorizontal size={20} className="text-foreground" />
-          </GlassButton>
+            <GlassButton label="More actions" onPress={() => setDetailsOpen(true)}>
+              <MoreHorizontal size={20} className="text-foreground" />
+            </GlassButton>
+          </Animated.View>
         </View>
         {error ? (
           <GlassChip className="mt-2 self-center px-3 py-1.5">
@@ -523,86 +536,96 @@ export function ConversationHeader({ conversation, mentionables, me, onChanged, 
                 marginLeft: panel.interpolate({ inputRange: [0, 1], outputRange: [12 + pillBox.x, 12] }),
                 marginRight: panel.interpolate({ inputRange: [0, 1], outputRange: [Math.max(12, windowWidth - 12 - pillBox.x - pillBox.width), 12] }),
                 height: panel.interpolate({ inputRange: [0, 1], outputRange: [CHROME_SIZE, panelHeight] }),
-                borderRadius: panel.interpolate({ inputRange: [0, 1], outputRange: [CHROME_SIZE / 2, 28] }),
+                borderRadius: panel.interpolate({ inputRange: [0, 1], outputRange: [CHROME_SIZE / 2, 26] }),
+                borderWidth: StyleSheet.hairlineWidth,
+                borderColor: 'rgba(128,128,128,0.35)',
               }}
               testID="conversation-actions-sheet"
             >
-            <Pressable className="flex-1" onPress={() => {}}>
-              <LiquidGlassBackdrop style={{ borderRadius: 28 }} />
-              <View pointerEvents="none" style={StyleSheet.absoluteFill} className="bg-card/60" />
-              <Animated.View style={{ flex: 1, opacity: panel.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 0, 1] }) }}>
-              <ScrollView
-                bounces={false}
-                showsVerticalScrollIndicator={false}
-                contentContainerClassName="px-2 pb-2"
-                onContentSizeChange={(_, h) => setPanelContentHeight(h)}
-              >
-                <View className="flex-row items-center gap-2 px-1 pb-2 pt-3">
-                  <Pressable onPress={closeDetails} accessibilityRole="button" accessibilityLabel="Close" className="h-10 w-10 items-center justify-center rounded-full active:bg-muted/60">
-                    <X size={20} className="text-foreground" />
-                  </Pressable>
-                  <View className="min-w-0 flex-1">
+              <Pressable className="flex-1" onPress={() => {}}>
+                <LiquidGlassBackdrop style={{ borderRadius: 26 }} />
+                <View pointerEvents="none" style={StyleSheet.absoluteFill} className="bg-card/70" />
+                {/* The title row is the pill's own height, so the title starts exactly where the pill's did and slides over beside the X. */}
+                <View className="justify-center" style={{ height: CHROME_SIZE }}>
+                  <Animated.View
+                    className="min-w-0 pr-12"
+                    style={{ paddingLeft: panel.interpolate({ inputRange: [0, 1], outputRange: [16, 56] }) }}
+                  >
                     <View className="flex-row items-center gap-1.5">
                       {leading}
                       <Text className="flex-shrink text-[15px] font-semibold text-foreground" numberOfLines={1}>{title}</Text>
+                      {conversation.archivedAt ? (
+                        <View className="rounded bg-muted px-1.5 py-0.5">
+                          <Text className="text-[10px] font-medium uppercase text-muted-foreground">Archived</Text>
+                        </View>
+                      ) : null}
                     </View>
                     {subtitle ? <Text className="text-[11px] text-muted-foreground" numberOfLines={1}>{subtitle}</Text> : null}
-                  </View>
-                  {conversation.archivedAt ? (
-                    <View className="mr-2 rounded bg-muted px-1.5 py-0.5">
-                      <Text className="text-[10px] font-medium uppercase text-muted-foreground">Archived</Text>
-                    </View>
-                  ) : null}
+                  </Animated.View>
+                  <Animated.View className="absolute left-1.5 top-0.5" style={{ opacity: panel }}>
+                    <Pressable onPress={closeDetails} accessibilityRole="button" accessibilityLabel="Close" className="h-10 w-10 items-center justify-center rounded-full active:bg-muted/60">
+                      <X size={20} className="text-foreground" />
+                    </Pressable>
+                  </Animated.View>
                 </View>
-                {conversation.topic || (canEditTopic && isChannel) ? (
-                  <Pressable
-                    disabled={!canEditTopic}
-                    onPress={() => fromDetails(() => setEditOpen(true))}
-                    accessibilityLabel={conversation.topic ? `Topic: ${conversation.topic}` : 'Add a topic'}
-                    className="px-3 pb-2"
+                {/* Clipped, not faded in late: the rows are there from the first frame of the growth. */}
+                <Animated.View style={{ flex: 1, opacity: panel.interpolate({ inputRange: [0, 0.3], outputRange: [0, 1], extrapolate: 'clamp' }) }}>
+                  <ScrollView
+                    bounces={false}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerClassName="px-2 pb-2"
+                    onContentSizeChange={(_, h) => setPanelContentHeight(h)}
                   >
-                    <Text className={cn('text-sm', conversation.topic ? 'text-muted-foreground' : 'text-muted-foreground/70')}>
-                      {conversation.topic || 'Add a topic'}
-                    </Text>
-                  </Pressable>
-                ) : null}
-                {chips.length ? (
-                  <View className="flex-row gap-2 px-1 pb-2">
-                    {chips.map((a) => (
+                    {conversation.topic || (canEditTopic && isChannel) ? (
+                      <Pressable
+                        disabled={!canEditTopic}
+                        onPress={() => fromDetails(() => setEditOpen(true))}
+                        accessibilityLabel={conversation.topic ? `Topic: ${conversation.topic}` : 'Add a topic'}
+                        className="px-3 pb-2"
+                      >
+                        <Text className={cn('text-[13px]', conversation.topic ? 'text-muted-foreground' : 'text-muted-foreground/70')}>
+                          {conversation.topic || 'Add a topic'}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                    {chips.length ? (
+                      <View className="flex-row gap-2 px-1 pb-2">
+                        {chips.map((a) => (
+                          <Pressable
+                            key={a.key}
+                            onPress={() => fromDetails(a.onPress)}
+                            accessibilityRole="button"
+                            accessibilityLabel={a.label}
+                            className="h-10 flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-foreground/10 bg-foreground/5 active:bg-foreground/10"
+                          >
+                            {a.icon(16)}
+                            <Text className="text-[14px] font-medium text-foreground" numberOfLines={1}>{chipLabel[a.key] ?? a.label}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    ) : null}
+                    {tabsMenu ? (
+                      <>
+                        <ChannelTabList items={tabsMenu.items} onAddBoard={tabsMenu.onAddBoard} onSelect={selectTab} />
+                        {listed.length ? <View className="mx-3 my-1.5 h-px bg-foreground/10" /> : null}
+                      </>
+                    ) : null}
+                    {listed.map((a) => (
                       <Pressable
                         key={a.key}
                         onPress={() => fromDetails(a.onPress)}
                         accessibilityRole="button"
                         accessibilityLabel={a.label}
-                        className="h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl border border-border/60 bg-muted/30 active:bg-muted/60"
+                        className="min-h-11 flex-row items-center gap-3 rounded-xl px-3 py-2.5 active:bg-foreground/10"
                       >
-                        {a.icon(16)}
-                        <Text className="text-[14px] font-medium text-foreground" numberOfLines={1}>{chipLabel[a.key] ?? a.label}</Text>
+                        {a.icon(18)}
+                        <Text className={cn('flex-1 text-[15px]', a.danger ? 'text-destructive' : 'text-foreground')}>{a.label}</Text>
+                        {a.danger ? null : <ChevronRight size={16} className="text-muted-foreground" />}
                       </Pressable>
                     ))}
-                  </View>
-                ) : null}
-                {tabsMenu ? (
-                  <>
-                    <ChannelTabList items={tabsMenu.items} onAddBoard={tabsMenu.onAddBoard} onSelect={selectTab} />
-                    {listed.length ? <View className="mx-3 my-1.5 h-px bg-border/60" /> : null}
-                  </>
-                ) : null}
-                {listed.map((a) => (
-                  <Pressable
-                    key={a.key}
-                    onPress={() => fromDetails(a.onPress)}
-                    accessibilityRole="button"
-                    accessibilityLabel={a.label}
-                    className="min-h-12 flex-row items-center gap-3 rounded-2xl px-3 py-3 active:bg-muted/60"
-                  >
-                    {a.icon(20)}
-                    <Text className={cn('flex-1 text-base', a.danger ? 'text-destructive' : 'text-foreground')}>{a.label}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-              </Animated.View>
-            </Pressable>
+                  </ScrollView>
+                </Animated.View>
+              </Pressable>
             </Animated.View>
           </Pressable>
         </Modal>

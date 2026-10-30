@@ -101,10 +101,10 @@ export function ChannelTabList({ items, onAddBoard, onSelect }: { items: Channel
           aria-selected={item.active}
           accessibilityLabel={item.label}
           testID={item.testID}
-          className={cn('min-h-12 flex-row items-center gap-3 rounded-2xl px-3 py-3 active:bg-muted/60', item.active && 'bg-muted/50')}
+          className={cn('min-h-11 flex-row items-center gap-3 rounded-xl px-3 py-2.5 active:bg-foreground/10', item.active && 'bg-foreground/10')}
         >
-          <TabIcon kind={item.kind} active={item.active} size={20} />
-          <Text className={cn('flex-1 text-base', item.active ? 'font-semibold text-foreground' : 'text-foreground')} numberOfLines={1}>{item.label}</Text>
+          <TabIcon kind={item.kind} active={item.active} size={18} />
+          <Text className={cn('flex-1 text-[15px]', item.active ? 'font-semibold text-foreground' : 'text-foreground')} numberOfLines={1}>{item.label}</Text>
           {item.active ? <Check size={16} className="text-muted-foreground" /> : null}
         </Pressable>
       ))}
@@ -114,10 +114,10 @@ export function ChannelTabList({ items, onAddBoard, onSelect }: { items: Channel
           accessibilityRole="button"
           accessibilityLabel="Add board"
           testID="channel-add-board"
-          className="min-h-12 flex-row items-center gap-3 rounded-2xl px-3 py-3 active:bg-muted/60"
+          className="min-h-11 flex-row items-center gap-3 rounded-xl px-3 py-2.5 active:bg-foreground/10"
         >
-          <Plus size={20} className="text-muted-foreground" />
-          <Text className="flex-1 text-base text-muted-foreground">Add board</Text>
+          <Plus size={18} className="text-muted-foreground" />
+          <Text className="flex-1 text-[15px] text-muted-foreground">Add board</Text>
         </Pressable>
       ) : null}
     </View>
