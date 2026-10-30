@@ -66,7 +66,7 @@ describe('recipients', () => {
     expect(await notified(await post({ authorUserId: seed.owner, text: 'morning all' }))).toEqual([])
     const result = await post({ authorUserId: seed.owner, text: `${userMentionToken(seed.member)} can you look?` })
     expect(await notified(result)).toEqual([`${seed.member}:mention`])
-    expect(pushes[0].title).toBe('owner in #general')
+    expect(pushes[0].title).toBe('Mentioned you · owner in #general')
     expect(pushes[0].body).toBe('@member can you look?')
     expect(pushes[0].data.conversationId).toBe(generalId)
   })
@@ -143,7 +143,18 @@ describe('recipients', () => {
     const dm = await service.openDirectConversation(seed.workspaceId, seed.owner, [seed.member])
     const result = await service.postMessage({ conversationId: dm.id, authorType: 'user', authorUserId: seed.owner, text: 'hey' })
     expect(await notified(result)).toEqual([`${seed.member}:dm`])
-    expect(pushes[0].title).toBe('owner')
+    expect(pushes[0].title).toBe('Direct message · owner')
+  })
+
+  test('a group DM push names the group, since the sender alone does not say which chat it is', async () => {
+    const group = await service.openDirectConversation(seed.workspaceId, seed.owner, [seed.member, seed.viewer])
+    expect(group.kind).toBe('group_dm')
+    const result = await service.postMessage({ conversationId: group.id, authorType: 'user', authorUserId: seed.owner, text: 'lunch?' })
+    expect(await notified(result)).toEqual([`${seed.member}:dm`, `${seed.viewer}:dm`].sort())
+    const title = pushes[0].title
+    expect(title).toMatch(/^Direct message · owner in group chat \(.*\)$/)
+    for (const name of ['owner', 'member', 'viewer']) expect(title).toContain(name)
+    expect(events[0].event.title).toMatch(/^owner in group chat \(/)
   })
 
   test('running agent placeholders and #activity posts notify nobody', async () => {

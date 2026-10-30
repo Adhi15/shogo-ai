@@ -209,6 +209,37 @@ async function notificationText(text: string, workspaceId: string): Promise<stri
   return markdownToPlainText(renderMentionsAsText(text, await loadMentionNames(workspaceId, [text])))
 }
 
+/** Group DMs have no name, so the banner names who is in the group (first three, then a count). */
+async function groupDmLabel(conversationId: string): Promise<string> {
+  const members = await db.conversationMember.findMany({
+    where: { conversationId, memberType: 'user', userId: { not: null } },
+    select: { user: { select: { name: true, email: true } } },
+    orderBy: { createdAt: 'asc' },
+  })
+  const names: string[] = members
+    .map((m: any) => (m.user?.name?.trim() || m.user?.email || '').split(' ')[0])
+    .filter(Boolean)
+  const shown = names.slice(0, 3).join(', ')
+  const rest = names.length - 3
+  return `group chat (${shown}${rest > 0 ? ` +${rest}` : ''})`
+}
+
+const PUSH_REASON_LABELS: Record<string, string> = {
+  dm: 'Direct message',
+  mention: 'Mentioned you',
+  broadcast: 'Mentioned you',
+  thread: 'Thread reply',
+}
+
+/**
+ * The phone shows a push as-is, so it carries the reason itself ("Mentioned you · ada in #general").
+ * Open clients get the plain title and add the same label locally.
+ */
+function pushTitleFor(reason: string, title: string): string {
+  const label = PUSH_REASON_LABELS[reason]
+  return label ? `${label} · ${title}` : title
+}
+
 async function describe(result: PostMessageResult) {
   const { row, conversation } = result
   const author = row.authorType === 'agent'
@@ -217,7 +248,9 @@ async function describe(result: PostMessageResult) {
   const text = await notificationText(row.text ?? '', conversation.workspaceId)
   const attachments = row.attachments?.length ? `📎 ${row.attachments.length} file${row.attachments.length > 1 ? 's' : ''}` : ''
   const body = (text || attachments || 'New message').slice(0, BODY_CHARS)
-  const where = isDirect(conversation.kind) ? null : `#${conversation.slug ?? conversation.name ?? 'channel'}`
+  const where = conversation.kind === 'group_dm'
+    ? await groupDmLabel(conversation.id)
+    : isDirect(conversation.kind) ? null : `#${conversation.slug ?? conversation.name ?? 'channel'}`
   const title = !where ? author : row.threadRootId ? `${author} replied in ${where}` : `${author} in ${where}`
   return { title, body }
 }
@@ -285,7 +318,7 @@ export async function notifyForMessage(result: PostMessageResult): Promise<Notif
     if (lastPush.size > 10_000) {
       for (const [k, t] of lastPush) if (now - t >= PUSH_COALESCE_MS) lastPush.delete(k)
     }
-    const payload = { title, body, type: 'channel-message' as const, channelId: 'messages', audience: 'chat' as const, sound, data: { ...data, reason } }
+    const payload = { title: pushTitleFor(reason, title), body, type: 'channel-message' as const, channelId: 'messages', audience: 'chat' as const, sound, data: { ...data, reason } }
     const wait = PUSH_DELAY_MS[mobilePushDelay]
     if (wait > 0) {
       scheduleDelayedPush(userId, conversation.id, conversation.workspaceId, wait, payload)
