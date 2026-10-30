@@ -158,6 +158,8 @@ mock.module('../../../lib/team-chat-connection', () => ({
   sendTyping: (_ws: string, conversationId: string) => sentTyping.push(conversationId),
 }))
 const muteCalls: Array<{ id: string; projectId: string | null; muted: boolean }> = []
+// The server reports huddles as on only when it has LiveKit configured.
+let huddlesOn = false
 mock.module('../../../lib/team-chat-api', () => ({
   absoluteApiUrl: (url: string) => url,
   newClientMsgId: () => 'client-msg-1',
@@ -165,6 +167,7 @@ mock.module('../../../lib/team-chat-api', () => ({
   isAgentDm: (c: any) => c.kind === 'dm' && (c.participants ?? []).some((p: any) => p.type === 'agent'),
   isSelfDm: (c: any) => c.kind === 'dm' && (c.participants ?? []).some((p: any) => p.type === 'user' && p.self === true),
   teamChatApi: () => ({
+    huddles: async () => ({ enabled: huddlesOn, huddles: [] }),
     pin: async (id: string, pinned: boolean) => { pins.push({ id, pinned }) },
     createReminder: async (_ws: string, input: { messageId: string; remindAt: string }) => {
       reminders.push({ messageId: input.messageId, remindAt: input.remindAt })
@@ -1701,6 +1704,21 @@ describe('ConversationHeader channel editing', () => {
     fireEvent.click(screen.getByTestId('channel-tab-board-support'))
     expect(onBoard).toHaveBeenCalled()
     expect(screen.getByLabelText('Add doc')).toBeTruthy()
+  })
+
+  test('floating phone header keeps the huddle button beside Catch me up', async () => {
+    const { _resetHuddlesForTests } = await import('../../../hooks/useHuddles')
+    huddlesOn = true
+    _resetHuddlesForTests()
+    try {
+      render(header(items('messages')))
+      expect(await screen.findByLabelText('Start a huddle')).toBeTruthy()
+      expect(screen.getByLabelText('Catch me up')).toBeTruthy()
+      expect(screen.getByLabelText('More actions')).toBeTruthy()
+    } finally {
+      huddlesOn = false
+      _resetHuddlesForTests()
+    }
   })
 
   test('floating phone header: the pill names the open board instead of the counts', () => {
