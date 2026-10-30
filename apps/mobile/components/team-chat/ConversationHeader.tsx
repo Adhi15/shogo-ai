@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2026 Shogo Technologies, Inc.
-import { useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, Alert, Animated, Easing, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Archive, Bell, BellOff, Bot, Check, ChevronLeft, FileText, FolderOpen, Hash, Lock, LogOut, MoreHorizontal, Paperclip, Pencil, PanelRight, Pin, Radio, Sparkles, Star, Trash2, UserCircle, UserPlus, Users, X } from 'lucide-react-native'
@@ -96,9 +96,26 @@ function confirm(title: string, message: string): Promise<boolean> {
 
 export function ConversationHeader({ conversation, mentionables, me, onChanged, onLeft, onDeleted, floating, onBack, onOpenProjectPane, onOpenFiles, onOpenDoc, onLayout, tabsMenu }: ConversationHeaderProps) {
   const insets = useSafeAreaInsets()
-  const { height: windowHeight } = useWindowDimensions()
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions()
   const router = useRouter()
   const [detailsOpen, setDetailsOpen] = useState(false)
+  // The details panel grows out of the title pill: `panel` runs 0 (the pill) to 1 (open).
+  // The modal stays mounted until the close animation has finished.
+  const [panelMounted, setPanelMounted] = useState(false)
+  const panel = useRef(new Animated.Value(0)).current
+  const [pillBox, setPillBox] = useState({ x: 0, width: 0 })
+  const [panelContentHeight, setPanelContentHeight] = useState(0)
+  useEffect(() => {
+    if (detailsOpen) {
+      setPanelMounted(true)
+      Animated.timing(panel, { toValue: 1, duration: 320, easing: Easing.bezier(0.2, 0.9, 0.25, 1), useNativeDriver: false }).start()
+    } else {
+      Animated.timing(panel, { toValue: 0, duration: 220, easing: Easing.bezier(0.4, 0, 0.2, 1), useNativeDriver: false }).start((result) => {
+        // An interrupted close (reopened mid-way) must keep the panel mounted.
+        if (!result || result.finished) setPanelMounted(false)
+      })
+    }
+  }, [detailsOpen, panel])
   // iOS can't present a modal while the sheet's modal is dismissing.
   const afterDetails = useRef<(() => unknown) | null>(null)
   const fromDetails = (fn: () => unknown) => {
@@ -424,6 +441,9 @@ export function ConversationHeader({ conversation, mentionables, me, onChanged, 
     const listed = actions.filter((a) => a.key !== 'catchup' && !chipKeys.includes(a.key))
     const chipLabel: Record<string, string> = { star: conversation.starred ? 'Starred' : 'Star', notify: 'Notify', members: 'Members' }
     const closeDetails = () => setDetailsOpen(false)
+    // Open to the content's height, until the keyboard-safe edge of the screen.
+    const panelMax = windowHeight - insets.top - insets.bottom - 24
+    const panelHeight = panelContentHeight ? Math.min(panelContentHeight, panelMax) : panelMax
     // Tab rows only switch views, so they need not wait out the modal's dismissal like the actions do.
     const selectTab = (run: () => void) => {
       closeDetails()
@@ -448,6 +468,7 @@ export function ConversationHeader({ conversation, mentionables, me, onChanged, 
             accessibilityLabel={`${title} details`}
             className="min-w-0 flex-shrink justify-center overflow-hidden rounded-full bg-transparent px-4 shadow-sm"
             style={{ height: CHROME_SIZE }}
+            onLayout={(e) => setPillBox({ x: e.nativeEvent.layout.x, width: e.nativeEvent.layout.width })}
           >
             <LiquidGlassBackdrop style={{ borderRadius: CHROME_SIZE / 2 }} />
             <View className="flex-row items-center gap-1.5">
@@ -483,9 +504,9 @@ export function ConversationHeader({ conversation, mentionables, me, onChanged, 
         ) : null}
 
         <Modal
-          visible={detailsOpen}
+          visible={panelMounted}
           transparent
-          animationType="slide"
+          animationType="none"
           onRequestClose={() => setDetailsOpen(false)}
           onDismiss={() => {
             const fn = afterDetails.current
@@ -493,16 +514,29 @@ export function ConversationHeader({ conversation, mentionables, me, onChanged, 
             if (fn) void fn()
           }}
         >
-          <Pressable className="flex-1 bg-black/30" onPress={closeDetails}>
-            <Pressable
-              className="mx-3 overflow-hidden rounded-[28px] bg-transparent shadow-lg"
-              style={{ marginTop: insets.top + 6, maxHeight: windowHeight - insets.top - insets.bottom - 24 }}
-              onPress={() => {}}
+          {/* No scrim: like Slack, the panel opens out of the pill over the live messages. */}
+          <Pressable className="flex-1" onPress={closeDetails}>
+            <Animated.View
+              className="overflow-hidden bg-transparent shadow-lg"
+              style={{
+                marginTop: insets.top + 6,
+                marginLeft: panel.interpolate({ inputRange: [0, 1], outputRange: [12 + pillBox.x, 12] }),
+                marginRight: panel.interpolate({ inputRange: [0, 1], outputRange: [Math.max(12, windowWidth - 12 - pillBox.x - pillBox.width), 12] }),
+                height: panel.interpolate({ inputRange: [0, 1], outputRange: [CHROME_SIZE, panelHeight] }),
+                borderRadius: panel.interpolate({ inputRange: [0, 1], outputRange: [CHROME_SIZE / 2, 28] }),
+              }}
               testID="conversation-actions-sheet"
             >
+            <Pressable className="flex-1" onPress={() => {}}>
               <LiquidGlassBackdrop style={{ borderRadius: 28 }} />
               <View pointerEvents="none" style={StyleSheet.absoluteFill} className="bg-card/60" />
-              <ScrollView bounces={false} showsVerticalScrollIndicator={false} contentContainerClassName="px-2 pb-2">
+              <Animated.View style={{ flex: 1, opacity: panel.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 0, 1] }) }}>
+              <ScrollView
+                bounces={false}
+                showsVerticalScrollIndicator={false}
+                contentContainerClassName="px-2 pb-2"
+                onContentSizeChange={(_, h) => setPanelContentHeight(h)}
+              >
                 <View className="flex-row items-center gap-2 px-1 pb-2 pt-3">
                   <Pressable onPress={closeDetails} accessibilityRole="button" accessibilityLabel="Close" className="h-10 w-10 items-center justify-center rounded-full active:bg-muted/60">
                     <X size={20} className="text-foreground" />
@@ -567,7 +601,9 @@ export function ConversationHeader({ conversation, mentionables, me, onChanged, 
                   </Pressable>
                 ))}
               </ScrollView>
+              </Animated.View>
             </Pressable>
+            </Animated.View>
           </Pressable>
         </Modal>
         {modals}
