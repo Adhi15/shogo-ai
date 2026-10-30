@@ -32,6 +32,7 @@ import {
   useDomainHttp,
 } from '../../contexts/domain'
 import { ComposerPlusSection } from '../../components/chat/ComposerPlusMenu'
+import { WorkspaceMovedBanner } from '../../components/settings/WorkspaceMovedBanner'
 import {
   MachineWorkspaceBanner,
   useMachineWorkspace,
@@ -1111,6 +1112,7 @@ export const HomeScreen = observer(function HomeScreen({
                 : restComposerSidePad,
             }}
           >
+            <WorkspaceMovedBanner />
             <MachineWorkspaceBanner
               machineName={machineInstance?.name}
               onRetry={retryMachineRequest}
