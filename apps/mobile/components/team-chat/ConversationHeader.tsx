@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2026 Shogo Technologies, Inc.
 import { useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, Text, TextInput, View, type LayoutChangeEvent } from 'react-native'
+import { ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Archive, Bell, BellOff, Bot, Check, ChevronLeft, FileText, FolderOpen, Hash, Lock, LogOut, MoreHorizontal, Paperclip, Pencil, PanelRight, Pin, Radio, Sparkles, Star, Trash2, UserCircle, UserPlus, Users, X } from 'lucide-react-native'
@@ -30,6 +30,7 @@ import { AgentAvatar } from './AgentAvatar'
 import { confirmsAddToChannel } from './AddToChannelConfirm'
 import { UserAvatar } from './UserAvatar'
 import { HuddleButton } from './Huddle'
+import { ChannelTabList, type ChannelTabItem } from './ChannelTabs'
 
 const api = teamChatApi()
 
@@ -72,6 +73,8 @@ export interface ConversationHeaderProps {
   onDeleted?: () => void
   /** Phone presentation: glass back button, title pill and actions sheet over the messages. */
   floating?: boolean
+  /** Phone: the channel's tabs, listed in the details panel instead of a strip under the header. */
+  tabsMenu?: { items: ChannelTabItem[]; onAddBoard?: () => void }
   onBack?: () => void
   /** Show the agent's project beside the conversation. Only passed on wide screens. */
   onOpenProjectPane?: (projectId: string, name: string) => void
@@ -91,8 +94,9 @@ function confirm(title: string, message: string): Promise<boolean> {
   )
 }
 
-export function ConversationHeader({ conversation, mentionables, me, onChanged, onLeft, onDeleted, floating, onBack, onOpenProjectPane, onOpenFiles, onOpenDoc, onLayout }: ConversationHeaderProps) {
+export function ConversationHeader({ conversation, mentionables, me, onChanged, onLeft, onDeleted, floating, onBack, onOpenProjectPane, onOpenFiles, onOpenDoc, onLayout, tabsMenu }: ConversationHeaderProps) {
   const insets = useSafeAreaInsets()
+  const { height: windowHeight } = useWindowDimensions()
   const router = useRouter()
   const [detailsOpen, setDetailsOpen] = useState(false)
   // iOS can't present a modal while the sheet's modal is dismissing.
@@ -191,7 +195,7 @@ export function ConversationHeader({ conversation, mentionables, me, onChanged, 
       })
     }
   }
-  if (onOpenDoc && floating) {
+  if (onOpenDoc && floating && !tabsMenu) {
     actions.push({
       key: 'doc',
       label: conversation.hasDoc ? 'Channel doc' : 'Create channel doc',
@@ -404,11 +408,27 @@ export function ConversationHeader({ conversation, mentionables, me, onChanged, 
   )
 
   if (floating) {
+    // Like Slack: the pill names the open tab when it isn't Messages, otherwise the member and tab counts.
+    const tabCount = tabsMenu ? tabsMenu.items.filter((t) => !t.placeholder).length : 0
+    const openTab = tabsMenu?.items.find((t) => t.active && t.kind !== 'messages')
+    const memberCount = `${conversation.members.length} ${conversation.members.length === 1 ? 'member' : 'members'}`
     const subtitle = peerId
       ? statusLine ?? (peerPresence ? presenceLabel(peerPresence) : null)
-      : isChannel && conversation.kind !== 'activity'
-        ? `${conversation.members.length} ${conversation.members.length === 1 ? 'member' : 'members'}`
-        : null
+      : openTab
+        ? openTab.label
+        : isChannel && conversation.kind !== 'activity'
+          ? tabCount > 1 ? `${memberCount} • ${tabCount} tabs` : memberCount
+          : null
+    const chipKeys = ['star', 'notify', 'members']
+    const chips = actions.filter((a) => chipKeys.includes(a.key))
+    const listed = actions.filter((a) => a.key !== 'catchup' && !chipKeys.includes(a.key))
+    const chipLabel: Record<string, string> = { star: conversation.starred ? 'Starred' : 'Star', notify: 'Notify', members: 'Members' }
+    const closeDetails = () => setDetailsOpen(false)
+    // Tab rows only switch views, so they need not wait out the modal's dismissal like the actions do.
+    const selectTab = (run: () => void) => {
+      closeDetails()
+      run()
+    }
     const catchUpAction = actions.find((a) => a.key === 'catchup')!
     return (
       <View
@@ -473,51 +493,80 @@ export function ConversationHeader({ conversation, mentionables, me, onChanged, 
             if (fn) void fn()
           }}
         >
-          <Pressable className="flex-1 justify-end bg-black/30" onPress={() => setDetailsOpen(false)}>
+          <Pressable className="flex-1 bg-black/30" onPress={closeDetails}>
             <Pressable
-              className="rounded-t-3xl bg-card px-2 pt-3"
-              style={{ paddingBottom: insets.bottom + 12 }}
+              className="mx-3 overflow-hidden rounded-[28px] bg-transparent shadow-lg"
+              style={{ marginTop: insets.top + 6, maxHeight: windowHeight - insets.top - insets.bottom - 24 }}
               onPress={() => {}}
               testID="conversation-actions-sheet"
             >
-              <View className="mb-2 h-1 w-10 self-center rounded-full bg-muted-foreground/30" />
-              <View className="flex-row items-center gap-2 px-3 py-2">
-                {leading}
-                <Text className="flex-1 text-base font-semibold text-foreground" numberOfLines={1}>
-                  {title}
-                </Text>
-                {conversation.archivedAt ? (
-                  <View className="rounded bg-muted px-1.5 py-0.5">
-                    <Text className="text-[10px] font-medium uppercase text-muted-foreground">Archived</Text>
+              <LiquidGlassBackdrop style={{ borderRadius: 28 }} />
+              <View pointerEvents="none" style={StyleSheet.absoluteFill} className="bg-card/60" />
+              <ScrollView bounces={false} showsVerticalScrollIndicator={false} contentContainerClassName="px-2 pb-2">
+                <View className="flex-row items-center gap-2 px-1 pb-2 pt-3">
+                  <Pressable onPress={closeDetails} accessibilityRole="button" accessibilityLabel="Close" className="h-10 w-10 items-center justify-center rounded-full active:bg-muted/60">
+                    <X size={20} className="text-foreground" />
+                  </Pressable>
+                  <View className="min-w-0 flex-1">
+                    <View className="flex-row items-center gap-1.5">
+                      {leading}
+                      <Text className="flex-shrink text-[15px] font-semibold text-foreground" numberOfLines={1}>{title}</Text>
+                    </View>
+                    {subtitle ? <Text className="text-[11px] text-muted-foreground" numberOfLines={1}>{subtitle}</Text> : null}
+                  </View>
+                  {conversation.archivedAt ? (
+                    <View className="mr-2 rounded bg-muted px-1.5 py-0.5">
+                      <Text className="text-[10px] font-medium uppercase text-muted-foreground">Archived</Text>
+                    </View>
+                  ) : null}
+                </View>
+                {conversation.topic || (canEditTopic && isChannel) ? (
+                  <Pressable
+                    disabled={!canEditTopic}
+                    onPress={() => fromDetails(() => setEditOpen(true))}
+                    accessibilityLabel={conversation.topic ? `Topic: ${conversation.topic}` : 'Add a topic'}
+                    className="px-3 pb-2"
+                  >
+                    <Text className={cn('text-sm', conversation.topic ? 'text-muted-foreground' : 'text-muted-foreground/70')}>
+                      {conversation.topic || 'Add a topic'}
+                    </Text>
+                  </Pressable>
+                ) : null}
+                {chips.length ? (
+                  <View className="flex-row gap-2 px-1 pb-2">
+                    {chips.map((a) => (
+                      <Pressable
+                        key={a.key}
+                        onPress={() => fromDetails(a.onPress)}
+                        accessibilityRole="button"
+                        accessibilityLabel={a.label}
+                        className="h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl border border-border/60 bg-muted/30 active:bg-muted/60"
+                      >
+                        {a.icon(16)}
+                        <Text className="text-[14px] font-medium text-foreground" numberOfLines={1}>{chipLabel[a.key] ?? a.label}</Text>
+                      </Pressable>
+                    ))}
                   </View>
                 ) : null}
-              </View>
-              {conversation.topic || (canEditTopic && isChannel) ? (
-                <Pressable
-                  disabled={!canEditTopic}
-                  onPress={() => fromDetails(() => setEditOpen(true))}
-                  accessibilityLabel={conversation.topic ? `Topic: ${conversation.topic}` : 'Add a topic'}
-                  className="px-3 pb-2"
-                >
-                  <Text className={cn('text-sm', conversation.topic ? 'text-muted-foreground' : 'text-muted-foreground/70')}>
-                    {conversation.topic || 'Add a topic'}
-                  </Text>
-                </Pressable>
-              ) : null}
-              {actions
-                .filter((a) => a.key !== 'catchup')
-                .map((a) => (
+                {tabsMenu ? (
+                  <>
+                    <ChannelTabList items={tabsMenu.items} onAddBoard={tabsMenu.onAddBoard} onSelect={selectTab} />
+                    {listed.length ? <View className="mx-3 my-1.5 h-px bg-border/60" /> : null}
+                  </>
+                ) : null}
+                {listed.map((a) => (
                   <Pressable
                     key={a.key}
                     onPress={() => fromDetails(a.onPress)}
                     accessibilityRole="button"
                     accessibilityLabel={a.label}
-                    className="min-h-12 flex-row items-center gap-3 rounded-xl px-3 py-3 active:bg-muted"
+                    className="min-h-12 flex-row items-center gap-3 rounded-2xl px-3 py-3 active:bg-muted/60"
                   >
-                    {a.icon(18)}
+                    {a.icon(20)}
                     <Text className={cn('flex-1 text-base', a.danger ? 'text-destructive' : 'text-foreground')}>{a.label}</Text>
                   </Pressable>
                 ))}
+              </ScrollView>
             </Pressable>
           </Pressable>
         </Modal>
