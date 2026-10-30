@@ -378,6 +378,7 @@ function Column(props: ColumnProps) {
               mentionables={props.mentionables}
               selected={props.selectedItemId === item.id}
               faded={props.dragging === item.id}
+              compact={!!props.fixedWidth}
               onPress={() => props.onOpen(item)}
               onLongPress={() => props.onMenu(item)}
             />
@@ -388,12 +389,14 @@ function Column(props: ColumnProps) {
   )
 }
 
-export function CardTile({ item, issues, mentionables, selected, faded, onPress, onLongPress }: {
+export function CardTile({ item, issues, mentionables, selected, faded, compact = false, onPress, onLongPress }: {
   item: WorkItem
   issues: HealthIssue[]
   mentionables: Mentionables | null
   selected: boolean
   faded: boolean
+  /** Phone board: age rides the key line and an empty chip row is dropped. */
+  compact?: boolean
   onPress: () => void
   onLongPress: () => void
 }) {
@@ -410,7 +413,8 @@ export function CardTile({ item, issues, mentionables, selected, faded, onPress,
       accessibilityHint="Opens the card. Long press to move it."
       testID={`board-card-${item.key}`}
       className={cn(
-        'gap-1.5 rounded-md border bg-card p-2.5 hover:border-primary/40 active:bg-muted/60',
+        'gap-1.5 rounded-md border bg-card p-2.5 hover:border-primary/40',
+        compact && 'active:bg-muted/60',
         selected ? 'border-primary' : working?.length ? 'border-primary/40' : 'border-border',
         faded && 'opacity-40',
       )}
@@ -421,10 +425,10 @@ export function CardTile({ item, issues, mentionables, selected, faded, onPress,
         <View className="flex-1" />
         <WorkingIndicator working={working} testID={`board-card-working-${item.key}`} className="shrink" />
         {occurrences ? <Text className="text-[11px] text-muted-foreground">×{occurrences}</Text> : null}
-        {item.columnEnteredAt ? <Text className="text-[11px] text-muted-foreground">{age(item.columnEnteredAt)}</Text> : null}
+        {compact && item.columnEnteredAt ? <Text className="text-[11px] text-muted-foreground">{age(item.columnEnteredAt)}</Text> : null}
       </View>
       <Text className="text-sm text-foreground" numberOfLines={3}>{item.title}</Text>
-      <View className={cn('flex-row flex-wrap items-center gap-1.5', !item.pr && !who && !issues.length && 'hidden')}>
+      <View className={cn('flex-row flex-wrap items-center gap-1.5', compact && !item.pr && !who && !issues.length && 'hidden')}>
         {item.pr ? <PullRequestChip pr={item.pr} /> : null}
         {who ? (
           <View className="flex-row items-center gap-1 rounded bg-muted px-1.5 py-0.5">
@@ -432,6 +436,7 @@ export function CardTile({ item, issues, mentionables, selected, faded, onPress,
             <Text className="max-w-32 text-[11px] text-muted-foreground" numberOfLines={1}>{who}</Text>
           </View>
         ) : null}
+        {!compact && item.columnEnteredAt ? <Text className="text-[11px] text-muted-foreground">{age(item.columnEnteredAt)}</Text> : null}
         {issues.map((issue) => (
           <View key={issue.type} className="rounded bg-destructive/10 px-1.5 py-0.5" accessibilityLabel={issue.detail}>
             <Text className="text-[10px] font-medium text-destructive">{ISSUE_LABEL[issue.type]}</Text>
