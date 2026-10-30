@@ -252,11 +252,17 @@ export function MessageList({
           </View>
         }
         ListEmptyComponent={
-          <View className="flex-1 items-center justify-center px-8 py-16" style={{ transform: [{ scaleY: -1 }] }}>
+          // Android's inverted list already flips this slot back upright.
+          <View
+            className="flex-1 items-center justify-center px-8 py-16"
+            style={Platform.OS === 'android' ? undefined : { transform: [{ scaleY: -1 }] }}
+          >
             <Text className="text-center text-sm text-muted-foreground">{emptyText ?? 'No messages yet.'}</Text>
           </View>
         }
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        alwaysBounceVertical={Platform.OS === 'ios'}
       />
       {showUnreadPill ? (
         <View
