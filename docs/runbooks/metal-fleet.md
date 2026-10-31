@@ -358,8 +358,13 @@ its home region would boot it on the wrong fleet. For each one:
 
 A job never suspends a runtime that a user opened while it was warming
 (`user-opened`), or one with an agent turn in flight (`busy`). It waits while a
-host is above `METAL_REWARM_MAX_HOST_UTIL_PCT` (75%) or over its disk
-watermark. Other outcomes to know:
+host is above its headroom ceiling — RAM in use (`METAL_REWARM_MAX_HOST_UTIL_PCT`,
+90%), or, for an agent too old to report memory, its VM count
+(`METAL_REWARM_MAX_HOST_VM_UTIL_PCT`, 95%) — or over its disk watermark. The
+count ceiling is deliberately not applied to hosts that do report memory: one
+big host carries twice the nominal VM cap while most of its RAM is free, and
+gating it on the count would bar warms from where most of the wave lands. Other
+outcomes to know:
 
 - `warmed-api-not-ready`: suspended, but the project's API server did not come
   up within the readiness window. The next open works, but look at the project.
@@ -424,7 +429,8 @@ a project during the job get a normal cold boot, and the job skips that project.
 | `METAL_REWARM_MAX_BYTES` | `0` (off) | Stop after this many snapshot bytes |
 | `METAL_REWARM_MIN_INTERVAL_MS` | 2 hours | Minimum gap between automatic jobs per region |
 | `METAL_REWARM_SETTLE_MS` | 2 minutes | How long the new sha must hold before a job starts |
-| `METAL_REWARM_MAX_HOST_UTIL_PCT` | `75` | Wait while a host is busier than this |
+| `METAL_REWARM_MAX_HOST_UTIL_PCT` | `90` | Wait while a host's RAM in use is above this |
+| `METAL_REWARM_MAX_HOST_VM_UTIL_PCT` | `95` | The same ceiling for hosts that report no memory, measured as % of the VM cap |
 | `METAL_PLACEMENT_TTL_S` | 7 days | How long the API remembers which host holds a runtime |
 | `METAL_STOP_TIMEOUT_MS` | 90 seconds | How long the API waits for a host to suspend a runtime |
 
@@ -474,6 +480,27 @@ to watch, not an incident. If it climbs anyway:
    `ip link del fctap<n>`. Deleting a device a running guest holds cuts its
    networking (`Failed to write to tap: File descriptor in bad state`) and the
    project must be recycled.
+
+### `MetalHostRootDiskPressure` — ROOT disk > 80% (critical 90%)
+The ROOT filesystem, not the NVMe cache: it holds `/var/lib/docker`, where each
+rootfs rebuild leaves its `shogo-runtime` image (~5.7 GB). At 100% every
+self-update on the host fails with "no space left on device" while the host
+keeps serving old guest code (dal-2, Oct 21–31 2026: 83 images, 100%, 14k failed
+updates in 24h). The agent collects old images itself (`image-gc.ts`) after a
+rebuild, before a pull above `METAL_ROOT_DISK_GC_PCT` (70%), and hourly above
+the same threshold. When the alert fires, the collector is not running (an agent
+older than that change), the daemon is unreachable, or a failed build left a
+multi-GB tar. Triage:
+
+```
+ssh root@<host>
+docker images --format '{{.Repository}}:{{.Tag}}' | grep -c shogo-runtime   # expect 1-2
+journalctl -u metal-agent | grep image-gc                                    # removals + disk % before/after
+ls -la /opt/fc-spike/build/rootfs.tar                                        # should not exist
+```
+
+Cordon the host until it is back under 80%; the fleet keeps serving from its
+siblings. `metal.host.root_disk_used_pct` on the fleet dashboard is the graph.
 
 ### `MetalHostDiskPressure` — NVMe > 85%
 GC evicting to S3 can't keep up. Cordon the hot host so it stops taking new cold

@@ -61,6 +61,9 @@ const {
   rewarmWatcherTick,
   runRewarm,
   startRewarmJob,
+  hasWarmHeadroom,
+  rewarmConfig,
+  warmUtilPct,
   REWARM_JOB_LEASE,
 } = await import('../metal-rewarm')
 type RewarmCandidate = import('../metal-rewarm').RewarmCandidate
@@ -348,12 +351,12 @@ describe('runRewarm limits', () => {
 
   test('waits while every host is saturated', async () => {
     const h = harness()
-    h.hosts = [{ hostId: 'h1', region: 'us', utilPct: 90, overWatermark: false }]
+    h.hosts = [{ hostId: 'h1', region: 'us', utilPct: 90, reportsMemory: true, overWatermark: false }]
     let waited = 0
     const baseSleep = h.deps.sleep
     h.deps.sleep = async (ms) => {
       waited += ms
-      if (waited >= 30_000) h.hosts = [{ hostId: 'h1', region: 'us', utilPct: 10, overWatermark: false }]
+      if (waited >= 30_000) h.hosts = [{ hostId: 'h1', region: 'us', utilPct: 10, reportsMemory: true, overWatermark: false }]
       await baseSleep(ms)
     }
     const s = await runRewarm(opts, h.deps, [cand('p1')], cfg)
@@ -666,5 +669,73 @@ describe('markRuntimeOpened', () => {
     expect(await store.get('opened:ws:proj:t1')).toBe('1000000')
     await markRuntimeOpened('ws:proj:t1', store, 1_020_000)
     expect(await store.get('opened:ws:proj:t1')).toBe('1020000')
+  })
+})
+
+
+/**
+ * SHO-271: a host used to be skipped for warms at 75% of its VM CAP even with
+ * hundreds of GB of RAM free. The US fleet peaked at 80% of its cap on Oct 26,
+ * 28 and 30 — i.e. warms were skipped exactly when a release needed them.
+ */
+describe('hasWarmHeadroom', () => {
+  const cfg = { maxHostUtilPct: 90, maxHostVmUtilPct: 95 }
+
+  test('warms a memory-reporting host however full its VM count is (dal-1: 157 VMs, 196% of an 80 cap)', () => {
+    // QA round 1: a 95% VM-count backstop applied to every host barred warms
+    // from dal-1 — 71% of US microVMs and most of the post-release wave.
+    expect(hasWarmHeadroom({ utilPct: 22, reportsMemory: true, vmUtilPct: 196, overWatermark: false }, cfg)).toBe(true)
+  })
+
+  test('stops a memory-reporting host at the RAM ceiling', () => {
+    expect(hasWarmHeadroom({ utilPct: 90, reportsMemory: true, vmUtilPct: 10, overWatermark: false }, cfg)).toBe(false)
+  })
+
+  test('a host that reports no memory is gated on its VM count near the cap, not the RAM ceiling', () => {
+    expect(hasWarmHeadroom({ utilPct: 95, reportsMemory: false, vmUtilPct: 95, overWatermark: false }, cfg)).toBe(false)
+    expect(hasWarmHeadroom({ utilPct: 94, reportsMemory: false, vmUtilPct: 94, overWatermark: false }, cfg)).toBe(true)
+    // 92 is past the 90 RAM ceiling but under the 95 count ceiling: the two
+    // knobs are independent, and a count-gated host is not held to the RAM one.
+    expect(hasWarmHeadroom({ utilPct: 92, reportsMemory: false, vmUtilPct: 92, overWatermark: false }, cfg)).toBe(true)
+    // A memory-reporting host ignores the count ceiling entirely (dal-1 at 196%).
+    expect(hasWarmHeadroom({ utilPct: 22, reportsMemory: true, vmUtilPct: 196, overWatermark: false }, cfg)).toBe(true)
+  })
+
+  test('never warms onto a host whose NVMe cache is shedding', () => {
+    expect(hasWarmHeadroom({ utilPct: 1, reportsMemory: true, vmUtilPct: 1, overWatermark: true }, cfg)).toBe(false)
+  })
+})
+
+describe('rewarmConfig defaults (SHO-271)', () => {
+  test('the RAM gate is 90% and the count ceiling for memory-blind hosts is 95%', () => {
+    for (const k of ['METAL_REWARM_MAX_HOST_UTIL_PCT', 'METAL_REWARM_MAX_HOST_VM_UTIL_PCT']) {
+      delete process.env[k]
+    }
+    const c = rewarmConfig()
+    expect(c.maxHostUtilPct).toBe(90)
+    expect(c.maxHostVmUtilPct).toBe(95)
+  })
+
+  test('both ceilings are tunable', () => {
+    process.env.METAL_REWARM_MAX_HOST_UTIL_PCT = '70'
+    process.env.METAL_REWARM_MAX_HOST_VM_UTIL_PCT = '88'
+    try {
+      const c = rewarmConfig()
+      expect(c.maxHostUtilPct).toBe(70)
+      expect(c.maxHostVmUtilPct).toBe(88)
+    } finally {
+      delete process.env.METAL_REWARM_MAX_HOST_UTIL_PCT
+      delete process.env.METAL_REWARM_MAX_HOST_VM_UTIL_PCT
+    }
+  })
+})
+
+describe('warmUtilPct prefers memory over the VM count', () => {
+  test('reports RAM in use when the host reports memory', () => {
+    expect(warmUtilPct({ utilPct: 80, load: { mem: { totalMiB: 400_000, availableMiB: 312_000 } } })).toBe(22)
+  })
+
+  test('falls back to the VM-count figure for an agent that reports no memory', () => {
+    expect(warmUtilPct({ utilPct: 80 })).toBe(80)
   })
 })
