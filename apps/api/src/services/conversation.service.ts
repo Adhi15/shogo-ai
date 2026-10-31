@@ -258,6 +258,9 @@ export function serializeMessage(row: any) {
     editedAt: row.editedAt ?? null,
     deletedAt: row.deletedAt ?? null,
     createdAt: row.createdAt,
+    // Sent so a device that keeps this page can seed its own change cursor
+    // instead of asking for the newest page again on the next open (SHO-260).
+    updatedAt: row.updatedAt ?? row.createdAt,
   }
 }
 
@@ -1596,6 +1599,44 @@ export interface ListMessagesOptions {
   afterSeq?: number
   limit?: number
   threadRootId?: string
+  /**
+   * Only rows written or changed at/after this instant (SHO-260). A device that
+   * already holds this conversation asks for the delta instead of the newest
+   * page: an edit, a soft delete or a reaction bumps `updatedAt`, so those come
+   * through as changed rows even though `seq` did not move.
+   */
+  changedSince?: Date
+}
+
+/**
+ * The newest `updatedAt` a delta read returned, or the caller's own floor when
+ * nothing changed. This is the cursor the client stores and sends back.
+ */
+function newestUpdatedAt(
+  rows: Array<{ updatedAt?: Date | null }>,
+  floor: Date,
+): string {
+  let newest = floor.getTime()
+  for (const row of rows) {
+    const at = row?.updatedAt ? new Date(row.updatedAt).getTime() : NaN
+    if (!Number.isNaN(at) && at > newest) newest = at
+  }
+  return new Date(newest).toISOString()
+}
+
+/**
+ * The cursor a *plain* page hands back (SHO-260). A device that just downloaded
+ * a page has no cursor of its own, and without one it can never ask for a
+ * delta — every reopen would run `loadInitial` again. The newest `updatedAt` on
+ * the page is that floor: anything that changes later is >= it.
+ */
+function pageCursor(rows: Array<{ updatedAt?: Date | null }>): string | undefined {
+  let newest = 0
+  for (const row of rows) {
+    const at = row?.updatedAt ? new Date(row.updatedAt).getTime() : NaN
+    if (!Number.isNaN(at) && at > newest) newest = at
+  }
+  return newest ? new Date(newest).toISOString() : undefined
 }
 
 export async function listMessages(conversationId: string, userId: string, opts: ListMessagesOptions = {}) {
@@ -1615,17 +1656,38 @@ export async function listMessagesUnchecked(conversationId: string, opts: ListMe
         conversationId,
         threadRootId: root.id,
         ...(opts.afterSeq !== undefined ? { seq: { gt: opts.afterSeq } } : {}),
+        ...(opts.changedSince ? { updatedAt: { gte: opts.changedSince } } : {}),
       },
       include: MESSAGE_INCLUDE,
       orderBy: { seq: 'asc' },
       take: 500,
     })
-    return { root: serializeMessage(root), messages: replies.map(serializeMessage), hasMore: false }
+    return {
+      root: serializeMessage(root),
+      messages: replies.map(serializeMessage),
+      hasMore: false,
+      ...(opts.changedSince
+        ? { cursor: newestUpdatedAt(replies, opts.changedSince) }
+        : { cursor: pageCursor(replies.length ? replies : [root]) }),
+    }
   }
 
   const where: Record<string, unknown> = {
     conversationId,
     OR: [{ threadRootId: null }, { alsoSentToChannel: true }],
+  }
+  if (opts.changedSince) {
+    const rows = await db.conversationMessage.findMany({
+      where: { ...where, updatedAt: { gte: opts.changedSince } },
+      include: MESSAGE_INCLUDE,
+      orderBy: { seq: 'asc' },
+      take: limit + 1,
+    })
+    return {
+      messages: rows.slice(0, limit).map(serializeMessage),
+      hasMore: rows.length > limit,
+      cursor: newestUpdatedAt(rows.slice(0, limit), opts.changedSince),
+    }
   }
   if (opts.afterSeq !== undefined) {
     const rows = await db.conversationMessage.findMany({
@@ -1634,7 +1696,12 @@ export async function listMessagesUnchecked(conversationId: string, opts: ListMe
       orderBy: { seq: 'asc' },
       take: limit + 1,
     })
-    return { messages: rows.slice(0, limit).map(serializeMessage), hasMore: rows.length > limit }
+    const page = rows.slice(0, limit)
+    return {
+      messages: page.map(serializeMessage),
+      hasMore: rows.length > limit,
+      cursor: pageCursor(page),
+    }
   }
   if (opts.beforeSeq !== undefined) where.seq = { lt: opts.beforeSeq }
   const rows = await db.conversationMessage.findMany({
@@ -1644,7 +1711,11 @@ export async function listMessagesUnchecked(conversationId: string, opts: ListMe
     take: limit + 1,
   })
   const page = rows.slice(0, limit).reverse()
-  return { messages: page.map(serializeMessage), hasMore: rows.length > limit }
+  return {
+    messages: page.map(serializeMessage),
+    hasMore: rows.length > limit,
+    cursor: pageCursor(page),
+  }
 }
 
 export async function getMessage(messageId: string, userId: string) {
@@ -1700,6 +1771,10 @@ export async function setReaction(messageId: string, userId: string, emoji: stri
   }
   const reactions = await db.conversationReaction.findMany({ where: { messageId }, select: { emoji: true, userId: true } })
   const summary = summarizeReactions(reactions)
+  // A reaction lives in its own table, so the parent row would otherwise keep
+  // its old `updatedAt` and a device asking "what changed?" would never see it
+  // (SHO-260).
+  await db.conversationMessage.update({ where: { id: messageId }, data: { updatedAt: new Date() } })
   await publish(access.conversation, { type: 'reaction.changed', messageId, reactions: summary })
   return summary
 }

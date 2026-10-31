@@ -111,6 +111,22 @@ import {
 } from "@shogo/shared-app/domain"
 import { decideMessagesPropagation } from "./messages-propagation"
 import { resolveHistoryPaint, resolveLiveTurnAttach } from "./history-paint"
+import {
+  patchSessionFeedbackCache,
+  readSessionFeedbackCache,
+  readSessionMessageCache,
+  writeSessionFeedbackCache,
+  writeSessionMessageCache,
+} from "../../lib/chat-panel-message-cache"
+import {
+  chatHistoryKey as buildChatHistoryKey,
+  chatSessionHistoryKey,
+  deltaSince,
+  readChatHistory,
+  removeChatHistory,
+  writeChatHistory,
+  type ChatHistoryEntry,
+} from "../../lib/chat-history-store"
 import { useResolvedTheme } from "../../contexts/theme"
 import { useNotifyOnTurnComplete } from "./useNotifyOnTurnComplete"
 import {
@@ -905,11 +921,64 @@ const chatMessagesScrollStyles = StyleSheet.create({
 //
 // Keyed by sessionId. Evicted on explicit `clearChatPanelMessageCache()` (e.g.
 // user logout). Memory cost is small: a few UIMessage arrays per session.
-const sessionMessageCache = new Map<string, UIMessage[]>()
+export { clearChatPanelMessageCache } from "../../lib/chat-panel-message-cache"
 
-/** Clear the in-memory per-session UIMessage cache (e.g. on logout). */
-export function clearChatPanelMessageCache(): void {
-  sessionMessageCache.clear()
+/** One `/chat-messages` row (page or delta) as the AI SDK message the panel renders. */
+function messageRowToUIMessage(msg: any): any {
+  const createdAt =
+    typeof msg?.createdAt === "string"
+      ? new Date(msg.createdAt).getTime()
+      : (msg?.createdAt ?? 0)
+  const baseMessage: any = {
+    id: msg.id,
+    role: msg.role as "user" | "assistant",
+    content: msg.content,
+    // Carried through so `extractTurnTiming`'s createdAt fallback and the
+    // `TurnFooter` relative-time label have a real timestamp for historical
+    // (pre-`data-turn-timing`) messages loaded from the server.
+    createdAt,
+  }
+  if (msg.parts) {
+    try {
+      baseMessage.parts =
+        typeof msg.parts === "string" ? JSON.parse(msg.parts) : msg.parts
+    } catch (err) {
+      console.warn("[ChatPanel] Failed to parse message parts:", err)
+    }
+  }
+  return baseMessage
+}
+
+/** The MST snapshot for a row from the delta route (ISO dates → timestamps). */
+function messageRowToSnapshot(msg: any): any {
+  const createdAt =
+    typeof msg?.createdAt === "string"
+      ? new Date(msg.createdAt).getTime()
+      : (msg?.createdAt ?? 0)
+  // Only the fields the store model declares: a row spread whole carries newer
+  // server columns (`updatedAt` in SHO-260) and the MST conversion throws,
+  // which aborted the reopen's whole hydrate → delta → probe chain.
+  return {
+    id: msg?.id,
+    sessionId: msg?.sessionId,
+    role: msg?.role,
+    content: msg?.content ?? "",
+    imageData: msg?.imageData ?? "",
+    parts: msg?.parts ?? "",
+    createdAt,
+    agent: msg?.agent ?? "technical",
+    model: msg?.model ?? "",
+    authorUserId: msg?.authorUserId ?? "",
+  }
+}
+
+/** Shape of `GET /api/chat-messages/session/:id/changes` (see SHO-260). */
+interface ChatChangesResult {
+  ok?: boolean
+  items?: any[]
+  total?: number | null
+  cursor?: string | null
+  reset?: boolean
 }
 
 // Local fallback queue cache. Server-backed queue rows live in the generated
@@ -1775,11 +1844,20 @@ const ChatPanelContent = observer(function ChatPanelContent({
       setFeedbackMap({})
       return
     }
+    // A session we've already loaded paints its thumbs straight from the
+    // cache; the fetch below only runs on a genuine first visit.
+    const cachedFeedback = readSessionFeedbackCache(currentSessionId)
+    if (cachedFeedback) {
+      setFeedbackMap(cachedFeedback)
+      return
+    }
     let cancelled = false
     setFeedbackMap({})
     getSessionFeedback(studioChat.chatSessionCollection, currentSessionId)
       .then((feedback) => {
-        if (!cancelled) setFeedbackMap(feedback)
+        if (cancelled) return
+        writeSessionFeedbackCache(currentSessionId, feedback)
+        setFeedbackMap(feedback)
       })
       .catch((err) => {
         console.warn("[ChatPanel] Failed to load session feedback:", err)
@@ -1818,6 +1896,12 @@ const ChatPanelContent = observer(function ChatPanelContent({
   // event so a report shows how hard the reply was to keep on screen.
   const historyPaintAttemptRef = useRef(0)
   const cachedMessagesRef = useRef<any[] | null>(null)
+  // Assigned once the device-history helpers further down are created. The
+  // render-time write-through and `paintLoadedHistory` sit above them, so they
+  // reach the store through this ref (SHO-260).
+  const persistProjectHistoryRef = useRef<
+    ((sessionId: string, messages: any[]) => void) | null
+  >(null)
   const hasInjectedInitialMessageRef = useRef(false)
   const isSendingMessageRef = useRef(false)
   const lastUserInputRef = useRef<{
@@ -1837,7 +1921,7 @@ const ChatPanelContent = observer(function ChatPanelContent({
   // of briefly showing a loader while the stale-while-revalidate fetch runs.
   if (prevSessionIdRef.current !== currentSessionId) {
     const cachedForSession = currentSessionId
-      ? (sessionMessageCache.get(currentSessionId) ?? null)
+      ? (readSessionMessageCache(currentSessionId) ?? null)
       : null
     prevSessionIdRef.current = currentSessionId
     cachedMessagesRef.current = cachedForSession
@@ -3530,7 +3614,8 @@ const ChatPanelContent = observer(function ChatPanelContent({
       // Keep the module cache in sync with the latest UI state so a subsequent
       // session switch (or panel remount) can hydrate instantly. This runs on
       // every render while streaming, which is cheap (Map.set by reference).
-      sessionMessageCache.set(currentSessionId, messages)
+      writeSessionMessageCache(currentSessionId, messages)
+      persistProjectHistoryRef.current?.(currentSessionId, messages)
     }
   }
   if (messages.length > 0) {
@@ -4346,7 +4431,8 @@ const ChatPanelContent = observer(function ChatPanelContent({
       // written (or was never this panel's), so the next paint may go ahead
       // without the live-tail guard (SHO-85).
       if (!paint.carriedLiveReply) liveReplySessionRef.current = null
-      sessionMessageCache.set(sessionId, painted)
+      writeSessionMessageCache(sessionId, painted)
+      persistProjectHistoryRef.current?.(sessionId, painted)
     },
     [sessionMessages, setMessages, reportHistoryPaintKeptLiveTail],
   )
@@ -5068,6 +5154,498 @@ const ChatPanelContent = observer(function ChatPanelContent({
     }
   }, [isStreaming, currentSessionId])
 
+  // ── Device-held history (SHO-260) ─────────────────────────────────────
+  //
+  // A chat the device has seen is painted from the store the moment it is
+  // opened — including after a reload, a new window or a desktop restart — and
+  // the only request that follows is `GET …/session/:id/changes`, which returns
+  // rows whose `updatedAt` moved since our cursor. The full first page is
+  // downloaded only for a chat with no saved slice, or when the server says
+  // the delta cannot be applied (`reset`, or a row count that does not add up
+  // because something was deleted).
+  const historyOrigin = String(machineInstance?.instanceId ?? API_URL ?? "local")
+  const activeSessionIdRef = useRef(currentSessionId)
+  activeSessionIdRef.current = currentSessionId
+  const historyKeyFor = useCallback(
+    (sessionId: string | null) =>
+      sessionId && userId
+        ? buildChatHistoryKey(
+            userId,
+            historyOrigin,
+            chatSessionHistoryKey(sessionId),
+          )
+        : null,
+    [userId, historyOrigin],
+  )
+  const historyStoreKey = historyKeyFor(currentSessionId)
+  const historyStoreKeyRef = useRef<string | null>(historyStoreKey)
+  historyStoreKeyRef.current = historyStoreKey
+  /** sessionKey → the cursor and row count the saved slice is complete at. */
+  const historyMetaRef = useRef<
+    Map<string, { cursor: string | null; total: number | null }>
+  >(new Map())
+  const historyHydratedRef = useRef<Set<string>>(new Set())
+  const historyHydrationPendingRef = useRef<Set<string>>(new Set())
+  const [historyHydrationTick, setHistoryHydrationTick] = useState(0)
+
+  /** The delta read. Same routing insert point as the transcript itself. */
+  const fetchChatChanges = useCallback(
+    async (sessionId: string, since: string): Promise<ChatChangesResult | null> => {
+      if (!API_URL) return null
+      const path = `/api/chat-messages/session/${encodeURIComponent(sessionId)}/changes`
+      const query = { agent: "technical", since }
+      try {
+        const body = domainHttp
+          ? (
+              await domainHttp.get<ChatChangesResult>(path, query)
+            ).data
+          : await (expoFetch ?? globalThis.fetch)(
+              `${API_URL}${path}?${new URLSearchParams(query).toString()}`,
+              {
+                headers: nativeHeaders ? nativeHeaders() : {},
+                credentials: Platform.OS === "web" ? "include" : undefined,
+              } as any,
+            )
+              .then((response) =>
+                response.ok ? response.json().catch(() => null) : null,
+              )
+              .catch(() => null)
+        return body && body.ok !== false ? body : null
+      } catch {
+        return null
+      }
+    },
+    [domainHttp, expoFetch, nativeHeaders],
+  )
+
+  /** Keep the device copy in step with whatever the panel last painted. */
+  const persistProjectHistory = useCallback(
+    async (sessionId: string, messages: any[]) => {
+      const key = historyKeyFor(sessionId)
+      if (!key || !messages.length) return
+      const meta = historyMetaRef.current.get(key)
+      const entry: ChatHistoryEntry = {
+        messages,
+        cursor: meta?.cursor ?? null,
+        total: meta?.total ?? null,
+        hasMoreOlder: false,
+        savedAt: Date.now(),
+      }
+      await writeChatHistory("project", key, entry)
+    },
+    [historyKeyFor],
+  )
+
+  // A streaming turn re-renders per token, and each render offers the whole
+  // transcript to the durable store. Writing on every offer would push a
+  // multi-hundred-KB record into IndexedDB hundreds of times a second, so the
+  // device copy is throttled: write now if the last write is old enough,
+  // otherwise let one trailing write land shortly after the burst.
+  const HISTORY_WRITE_MIN_INTERVAL_MS = 2000
+  const historyWriteThrottleRef = useRef<
+    Map<string, { lastAt: number; timer: ReturnType<typeof setTimeout> | null }>
+  >(new Map())
+
+  persistProjectHistoryRef.current = (sessionId, messages) => {
+    const key = historyKeyFor(sessionId)
+    if (!key || !messages.length) return
+    const state = historyWriteThrottleRef.current
+    const entry = state.get(key) ?? { lastAt: 0, timer: null }
+    state.set(key, entry)
+    const flush = () => {
+      entry.lastAt = Date.now()
+      entry.timer = null
+      void persistProjectHistory(sessionId, messages)
+    }
+    if (entry.timer) return
+    const wait = entry.lastAt + HISTORY_WRITE_MIN_INTERVAL_MS - Date.now()
+    if (wait <= 0) {
+      flush()
+      return
+    }
+    entry.timer = setTimeout(() => {
+      entry.timer = null
+      flush()
+    }, wait)
+  }
+
+  /**
+   * A cold first page carries no `updatedAt`, so ask the delta route once for
+   * the newest few seconds of the chat. That is where the cursor comes from —
+   * without it every subsequent open would have to download the page again.
+   */
+  const seedHistoryCursor = useCallback(
+    async (sessionId: string, newest: any) => {
+      const key = historyKeyFor(sessionId)
+      if (!key || !newest) return
+      const at =
+        typeof newest.createdAt === "number"
+          ? newest.createdAt
+          : new Date(newest.createdAt).getTime()
+      if (!Number.isFinite(at)) return
+      const body = await fetchChatChanges(
+        sessionId,
+        new Date(at - 5000).toISOString(),
+      )
+      if (!body?.cursor) return
+      historyMetaRef.current.set(key, {
+        cursor: body.cursor,
+        total: body.total ?? null,
+      })
+      const cached = cachedMessagesRef.current
+      if (cached?.length) void persistProjectHistory(sessionId, cached)
+    },
+    [historyKeyFor, fetchChatChanges, persistProjectHistory],
+  )
+
+  /**
+   * Merge a delta into the transcript. Returns false when the caller must fall
+   * back to the full first page: no usable answer, `reset`, or a row count that
+   * says rows were deleted while we were away.
+   */
+  const applyChatDelta = useCallback(
+    async (
+      sessionId: string,
+      key: string,
+      cursor: string,
+      generation: number,
+    ): Promise<boolean> => {
+      const since = deltaSince(cursor)
+      if (!since) return false
+      const body = await fetchChatChanges(sessionId, since)
+      if (generation !== loadGenerationRef.current) return true
+      if (activeSessionIdRef.current !== sessionId) return true
+      if (!body || body.reset) return false
+
+      const items = Array.isArray(body.items) ? body.items : []
+      const current = (cachedMessagesRef.current ?? []) as any[]
+      const known = new Set(current.map((m) => String(m.id)))
+      const newIds = items.filter((row) => row?.id && !known.has(String(row.id))).length
+      const meta = historyMetaRef.current.get(key)
+      // A row that vanished (truncate-from, an edit that re-sent the tail) only
+      // shows up as a smaller total: the delta cannot carry a deletion.
+      if (
+        meta?.total != null &&
+        body.total != null &&
+        body.total !== meta.total + newIds
+      ) {
+        return false
+      }
+
+      const byId = new Map(current.map((m) => [String(m.id), m]))
+      for (const row of items) {
+        if (!row?.id) continue
+        byId.set(String(row.id), messageRowToUIMessage(row))
+        sessionMessages?.addItem(messageRowToSnapshot(row))
+      }
+      const history = Array.from(byId.values()).sort(
+        (a: any, b: any) => (a.createdAt || 0) - (b.createdAt || 0),
+      )
+
+      const paint = resolveHistoryPaint({
+        history,
+        current: cachedMessagesRef.current ?? [],
+        keepsLiveTail: liveReplySessionRef.current === sessionId,
+      })
+      if (paint.keptLiveTail) {
+        historyPaintAttemptRef.current += 1
+        reportHistoryPaintKeptLiveTail("delta", paint.reason, history)
+        return true
+      }
+      const painted = paint.messages as any[]
+      const before = cachedMessagesRef.current
+      const changed =
+        !before ||
+        before.length !== painted.length ||
+        before[before.length - 1]?.id !== painted[painted.length - 1]?.id ||
+        (before[before.length - 1] as any)?.content !==
+          (painted[painted.length - 1] as any)?.content
+      if (changed) {
+        cachedMessagesRef.current = painted
+        lastNonEmptyMessagesRef.current = painted
+        setMessages(painted)
+      } else if (before) {
+        cachedMessagesRef.current = painted
+      }
+      writeSessionMessageCache(sessionId, painted)
+      if (!paint.carriedLiveReply) liveReplySessionRef.current = null
+      historyMetaRef.current.set(key, {
+        // A delta that carried nothing must not touch the floor: a server that
+        // echoes `since` would walk it backwards 5 s per quiet reopen.
+        cursor: items.length ? (body.cursor ?? cursor) : cursor,
+        total: body.total ?? meta?.total ?? null,
+      })
+      cacheRefreshedAtRef.current.set(sessionId, performance.now())
+      void persistProjectHistory(sessionId, painted)
+      return true
+    },
+    [
+      fetchChatChanges,
+      persistProjectHistory,
+      sessionMessages,
+      setMessages,
+    ],
+  )
+
+  // Paint from the device before the network is touched. Only the session's
+  // first appearance in this JS session reads the store, and only when the
+  // in-memory cache is empty (memory is always the fresher of the two).
+  useEffect(() => {
+    const key = historyStoreKey
+    const sessionId = currentSessionId
+    if (!isActive || !key || !sessionId) return
+    if (historyHydratedRef.current.has(key)) return
+    if (cachedMessagesRef.current && cachedMessagesRef.current.length > 0) {
+      historyHydratedRef.current.add(key)
+      return
+    }
+    historyHydratedRef.current.add(key)
+    historyHydrationPendingRef.current.add(key)
+    void readChatHistory("project", key)
+      .then(async (entry) => {
+        if (!entry?.messages.length) return
+        historyMetaRef.current.set(key, {
+          cursor: entry.cursor,
+          total: entry.total,
+        })
+        if (activeSessionIdRef.current !== sessionId) return
+        if (isStreamingRef.current || isSendingMessageRef.current) return
+        const painted = entry.messages as any[]
+        cachedMessagesRef.current = painted
+        lastNonEmptyMessagesRef.current = painted
+        setMessages(painted)
+        setIsInitialLoadComplete(true)
+        try {
+          if (entry.cursor) {
+            await applyChatDelta(sessionId, key, entry.cursor, loadGenerationRef.current)
+          }
+        } catch (err) {
+          // A delta that fails (a store write, a row the model rejects) must
+          // not cost the reopen its live-turn attach: the probe below is the
+          // only thing that follows a running or queued reply.
+          console.warn("[ChatPanel] chat delta failed:", err)
+        }
+        // History is in place: attach to a turn that is genuinely running, the
+        // same guarantee the cold path gives (SHO-260).
+        probeLiveTurnAfterHistory(sessionId, loadGenerationRef.current)
+      })
+      .catch((err) => console.warn("[ChatPanel] saved history failed to load:", err))
+      .finally(() => {
+        historyHydrationPendingRef.current.delete(key)
+        setHistoryHydrationTick((tick) => tick + 1)
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, historyStoreKey, currentSessionId])
+
+  /**
+   * Ask the runtime, once the history is in place, whether there is a genuinely
+   * live turn to attach to (SHO-260). Every history path runs it — the cold
+   * page load, the warm delta and the hydration effect — because a chat whose
+   * turn started in another window (or from the queue's wake) used to attach
+   * only via the cold path's probe; without it the panel paints its stale
+   * slice and shows no streaming/Stop until a focus event or a send.
+   *
+   * The probe is robust (every failure mode → 'unknown' → no attach) so this is
+   * fire-and-forget. Critical: only run for the live generation — otherwise a
+   * tab switch mid-load would attach to a stale session's stream and corrupt
+   * the active panel's message list.
+   */
+  const probeLiveTurnAfterHistory = useCallback(
+    (loadSessionId: string, myGeneration: number) => {
+      if (myGeneration !== loadGenerationRef.current) return
+      if (liveTurnReloadNonceRef.current === historyOnlyNonceRef.current) return
+      const turnUrl = buildChatTurnUrl(
+        API_URL!,
+        projectId,
+        localAgentUrl,
+        loadSessionId,
+        chatWorkspaceId,
+      )
+      void probeChatTurn({
+        url: turnUrl,
+        fetch: expoFetch,
+        headers: nativeHeaders ? nativeHeaders() : undefined,
+        credentials: Platform.OS === "web" ? "include" : undefined,
+        retryDelaysMs: [1000, 3000],
+      }).then((turn) => {
+        if (myGeneration !== loadGenerationRef.current) return
+        lastLiveTurnCheckAtRef.current = Date.now()
+        const expectedLive = liveTurnExpectedRef.current
+        liveTurnExpectedRef.current = false
+        // A turn this window stopped is not a turn to attach to, even while
+        // the runtime still reports it (stop reaches it a beat later).
+        const stopped = turn.turnId !== null && turn.turnId === stoppedTurnIdRef.current
+        if (isLiveTurnOtherThan(turn, stoppedTurnIdRef.current)) {
+          guardedAutoResumeStream("live-turn-probe")
+        } else if (expectedLive && !stopped) {
+          setTimeout(
+            () => reloadAndAttachLiveTurnRef.current({ settle: false }),
+            750,
+          )
+        }
+      })
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [projectId, localAgentUrl, chatWorkspaceId, guardedAutoResumeStream],
+  )
+
+  /**
+   * The cold path: download the newest page and paint it. Runs for a chat the
+   * device has never seen, and as the fallback when a delta cannot be applied.
+   */
+  const loadFirstPage = useCallback(
+    (loadSessionId: string, myGeneration: number, authoritative = false) => {
+      if (!sessionMessages) return
+        sessionMessages
+          .loadPage(
+            { sessionId: loadSessionId, agent: "technical" },
+            { limit: MESSAGE_PAGE_SIZE, offset: 0 },
+          )
+          .then((_result: any) => {
+            if (myGeneration !== loadGenerationRef.current) return
+            if (isStreamingRef.current || isSendingMessageRef.current) return
+
+            const loaded = [...sessionMessages.all].sort(
+              (a: any, b: any) => (a.createdAt || 0) - (b.createdAt || 0),
+            )
+
+            if (loaded.length === 0) return
+
+            const aiMessages = loaded.map((msg: any) => {
+              const baseMessage: any = {
+                id: msg.id,
+                role: msg.role as "user" | "assistant",
+                content: msg.content,
+                // Carried through so `extractTurnTiming`'s createdAt fallback
+                // and the `TurnFooter` relative-time label ("2m ago") have a
+                // real timestamp for historical (pre-`data-turn-timing`)
+                // messages loaded from the server.
+                createdAt: msg.createdAt,
+              }
+              if (msg.parts) {
+                try {
+                  baseMessage.parts = JSON.parse(msg.parts)
+                } catch (err) {
+                  console.warn("[ChatPanel] Failed to parse message parts:", err)
+                }
+              }
+              return baseMessage
+            })
+
+            const cached = cachedMessagesRef.current
+            // The server told this caller the chat changed shape (`reset`, or a
+            // count that does not add up), so rows were deleted and this page —
+            // not the screen — is the transcript. SHO-85's "never paint behind
+            // the screen" rule is about a reply the server has not written yet;
+            // with no live tail to protect, applying it here would keep the
+            // deleted rows on screen forever (SHO-260).
+            if (authoritative && liveReplySessionRef.current !== loadSessionId) {
+              cachedMessagesRef.current = aiMessages
+              lastNonEmptyMessagesRef.current = aiMessages
+              setMessages(aiMessages)
+              writeSessionMessageCache(loadSessionId, aiMessages)
+              cacheRefreshedAtRef.current.set(loadSessionId, performance.now())
+              // Adopt the page's own numbers. Without this the entry keeps the
+              // `total` that sent us down the fallback, so the very next delta
+              // mismatches again and the panel re-downloads the page in a loop.
+              const key = historyKeyFor(loadSessionId)
+              if (key) {
+                const newest = aiMessages[aiMessages.length - 1]
+                const rawAt = (newest as any)?.createdAt
+                const at =
+                  typeof rawAt === "number" ? rawAt : new Date(rawAt ?? NaN).getTime()
+                historyMetaRef.current.set(key, {
+                  cursor: Number.isFinite(at) ? new Date(at).toISOString() : null,
+                  total: (sessionMessages as any).total ?? aiMessages.length,
+                })
+              }
+              void persistProjectHistory(loadSessionId, aiMessages)
+              return
+            }
+            // Never paint a transcript that is behind what is on screen: the reply
+            // this panel just streamed is written server-side after the stream
+            // EOFs, so history can legitimately be missing it (SHO-85).
+            const paint = resolveHistoryPaint({
+              history: aiMessages,
+              current: cached ?? [],
+              keepsLiveTail: liveReplySessionRef.current === loadSessionId,
+            })
+            if (paint.keptLiveTail) {
+              historyPaintAttemptRef.current += 1
+              reportHistoryPaintKeptLiveTail("effect-1", paint.reason, aiMessages)
+              return
+            }
+            // Paint the decision's transcript rather than raw history: when history
+            // is ahead of the screen it also carries the reply that only exists on
+            // screen, spliced in front of the prompt that started the next turn
+            // (SHO-147).
+            const painted = paint.messages as any[]
+            const textLength = (m: any): number => {
+              const fromParts = (m?.parts ?? []).reduce(
+                (n: number, p: any) =>
+                  n + (p?.type === "text" && typeof p.text === "string" ? p.text.length : 0),
+                0,
+              )
+              return fromParts || (typeof m?.content === "string" ? m.content.length : 0)
+            }
+            // A reply read while the server was still writing it keeps its id and
+            // only grows, so compare its text too.
+            const changed =
+              !cached ||
+              cached.length !== painted.length ||
+              cached[cached.length - 1]?.id !==
+                painted[painted.length - 1]?.id ||
+              textLength(cached[cached.length - 1]) !==
+                textLength(painted[painted.length - 1])
+
+            if (changed) {
+              cachedMessagesRef.current = painted
+              writeSessionMessageCache(loadSessionId, painted)
+              setMessages(painted)
+              historyPaintAttemptRef.current = 0
+            } else {
+              // Same shape as cache — still refresh the module cache entry so any
+              // later in-flight mutations (status flips, etc.) don't drift.
+              writeSessionMessageCache(loadSessionId, painted)
+            }
+            // History accounts for the screen again: the reply it was missing has
+            // been written (or was never this panel's), so the next paint may go
+            // ahead without the live-tail guard (SHO-85).
+            if (!paint.carriedLiveReply) liveReplySessionRef.current = null
+            // Keep the device copy in step and learn the delta cursor from the
+            // newest row this page carried (SHO-260).
+            void persistProjectHistory(loadSessionId, painted)
+            void seedHistoryCursor(loadSessionId, loaded[loaded.length - 1])
+          })
+          .catch((err: any) =>
+            console.error("[ChatPanel] Failed to load messages:", err),
+          )
+          .finally(() => {
+            // Stamp the cache freshness on every completion path (empty results,
+            // populated results, and errors). Without this, an empty session would
+            // skip the stamp via the `loaded.length === 0` early return above and
+            // then loop: Effect 1 re-runs on the isLoadingMessages flip, the
+            // `cacheAgeMs < 5000` bailout misses, a new fetch starts, and the
+            // resulting isInitialLoadComplete flip used to fire `useChat`'s
+            // resumeStream every cycle (visible as
+            // `[AgentChat] Stream reconnect ... snapshot=none` spam plus a
+            // flickering "Loading conversation..." indicator). Now that
+            // `useChat({ resume: false })` no longer auto-attaches we still
+            // need the stamp for the dedup-the-fetch reason.
+            cacheRefreshedAtRef.current.set(loadSessionId, performance.now())
+            if (myGeneration === loadGenerationRef.current) {
+              isLoadingMessagesRef.current = false
+              setIsLoadingMessages(false)
+              setIsInitialLoadComplete(true)
+            }
+
+            probeLiveTurnAfterHistory(loadSessionId, myGeneration)
+          })
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sessionMessages],
+  )
+
   // Effect 1: Load chat messages with stale-while-revalidate.
   // On tab activate: show cached messages instantly (if available), then fetch
   // fresh data from the API. Only update the display if the response differs.
@@ -5081,6 +5659,19 @@ const ChatPanelContent = observer(function ChatPanelContent({
       setIsInitialLoadComplete(true)
       return
     }
+
+    // The device copy is being read for this session: let that paint (and its
+    // delta) run before deciding anything here, or we would show the loader
+    // and download the page we already have (SHO-260).
+    //
+    // The pending set is keyed by the store key (`userId:origin:session`), not
+    // by the bare session id — checking `currentSessionId` here never matched,
+    // so this never actually waited. And while `userId` is still resolving the
+    // key is null: without this guard the first run after a reload downloads
+    // the newest page before the device copy is even opened, which is the exact
+    // cost this feature exists to remove.
+    if (!historyStoreKey) return
+    if (historyHydrationPendingRef.current.has(historyStoreKey)) return
 
     const hasCached =
       cachedMessagesRef.current && cachedMessagesRef.current.length > 0
@@ -5154,6 +5745,31 @@ const ChatPanelContent = observer(function ChatPanelContent({
       setIsInitialLoadComplete(true)
     }
 
+    // SHO-260: with a saved cursor, ask only for what changed. The full page
+    // below runs only when there is no cursor, or the delta says to reload.
+    const warmKey = historyKeyFor(currentSessionId)
+    const warmMeta = warmKey ? historyMetaRef.current.get(warmKey) : undefined
+    if (hasCached && warmKey && warmMeta?.cursor && sessionMessages) {
+      const myGeneration = ++loadGenerationRef.current
+      const loadSessionId = currentSessionId
+      void applyChatDelta(loadSessionId, warmKey, warmMeta.cursor, myGeneration).then(
+        (applied) => {
+          if (myGeneration !== loadGenerationRef.current) return
+          if (applied) {
+            // Carrying on from a saved slice still has to attach to a live
+            // turn, the same guarantee the cold path gives (SHO-260).
+            probeLiveTurnAfterHistory(loadSessionId, myGeneration)
+            return
+          }
+          isLoadingMessagesRef.current = true
+          setIsLoadingMessages(true)
+          // `reset` / a count that does not add up: the page is authoritative.
+          loadFirstPage(loadSessionId, ++loadGenerationRef.current, true)
+        },
+      )
+      return
+    }
+
     isLoadingMessagesRef.current = true
     setIsLoadingMessages(true)
     if (!hasCached) setIsInitialLoadComplete(false)
@@ -5171,157 +5787,7 @@ const ChatPanelContent = observer(function ChatPanelContent({
     const myGeneration = ++loadGenerationRef.current
     const loadSessionId = currentSessionId
 
-    sessionMessages
-      .loadPage(
-        { sessionId: currentSessionId, agent: "technical" },
-        { limit: MESSAGE_PAGE_SIZE, offset: 0 },
-      )
-      .then((_result: any) => {
-        if (myGeneration !== loadGenerationRef.current) return
-        if (isStreamingRef.current || isSendingMessageRef.current) return
-
-        const loaded = [...sessionMessages.all].sort(
-          (a: any, b: any) => (a.createdAt || 0) - (b.createdAt || 0),
-        )
-
-        if (loaded.length === 0) return
-
-        const aiMessages = loaded.map((msg: any) => {
-          const baseMessage: any = {
-            id: msg.id,
-            role: msg.role as "user" | "assistant",
-            content: msg.content,
-            // Carried through so `extractTurnTiming`'s createdAt fallback
-            // and the `TurnFooter` relative-time label ("2m ago") have a
-            // real timestamp for historical (pre-`data-turn-timing`)
-            // messages loaded from the server.
-            createdAt: msg.createdAt,
-          }
-          if (msg.parts) {
-            try {
-              baseMessage.parts = JSON.parse(msg.parts)
-            } catch (err) {
-              console.warn("[ChatPanel] Failed to parse message parts:", err)
-            }
-          }
-          return baseMessage
-        })
-
-        const cached = cachedMessagesRef.current
-        // Never paint a transcript that is behind what is on screen: the reply
-        // this panel just streamed is written server-side after the stream
-        // EOFs, so history can legitimately be missing it (SHO-85).
-        const paint = resolveHistoryPaint({
-          history: aiMessages,
-          current: cached ?? [],
-          keepsLiveTail: liveReplySessionRef.current === loadSessionId,
-        })
-        if (paint.keptLiveTail) {
-          historyPaintAttemptRef.current += 1
-          reportHistoryPaintKeptLiveTail("effect-1", paint.reason, aiMessages)
-          return
-        }
-        // Paint the decision's transcript rather than raw history: when history
-        // is ahead of the screen it also carries the reply that only exists on
-        // screen, spliced in front of the prompt that started the next turn
-        // (SHO-147).
-        const painted = paint.messages as any[]
-        const textLength = (m: any): number => {
-          const fromParts = (m?.parts ?? []).reduce(
-            (n: number, p: any) =>
-              n + (p?.type === "text" && typeof p.text === "string" ? p.text.length : 0),
-            0,
-          )
-          return fromParts || (typeof m?.content === "string" ? m.content.length : 0)
-        }
-        // A reply read while the server was still writing it keeps its id and
-        // only grows, so compare its text too.
-        const changed =
-          !cached ||
-          cached.length !== painted.length ||
-          cached[cached.length - 1]?.id !==
-            painted[painted.length - 1]?.id ||
-          textLength(cached[cached.length - 1]) !==
-            textLength(painted[painted.length - 1])
-
-        if (changed) {
-          cachedMessagesRef.current = painted
-          sessionMessageCache.set(loadSessionId, painted)
-          setMessages(painted)
-          historyPaintAttemptRef.current = 0
-        } else {
-          // Same shape as cache — still refresh the module cache entry so any
-          // later in-flight mutations (status flips, etc.) don't drift.
-          sessionMessageCache.set(loadSessionId, painted)
-        }
-        // History accounts for the screen again: the reply it was missing has
-        // been written (or was never this panel's), so the next paint may go
-        // ahead without the live-tail guard (SHO-85).
-        if (!paint.carriedLiveReply) liveReplySessionRef.current = null
-      })
-      .catch((err: any) =>
-        console.error("[ChatPanel] Failed to load messages:", err),
-      )
-      .finally(() => {
-        // Stamp the cache freshness on every completion path (empty results,
-        // populated results, and errors). Without this, an empty session would
-        // skip the stamp via the `loaded.length === 0` early return above and
-        // then loop: Effect 1 re-runs on the isLoadingMessages flip, the
-        // `cacheAgeMs < 5000` bailout misses, a new fetch starts, and the
-        // resulting isInitialLoadComplete flip used to fire `useChat`'s
-        // resumeStream every cycle (visible as
-        // `[AgentChat] Stream reconnect ... snapshot=none` spam plus a
-        // flickering "Loading conversation..." indicator). Now that
-        // `useChat({ resume: false })` no longer auto-attaches we still
-        // need the stamp for the dedup-the-fetch reason.
-        cacheRefreshedAtRef.current.set(loadSessionId, performance.now())
-        if (myGeneration === loadGenerationRef.current) {
-          isLoadingMessagesRef.current = false
-          setIsLoadingMessages(false)
-          setIsInitialLoadComplete(true)
-        }
-
-        // Now that the history is in place, ask the runtime if there's a
-        // genuinely live, in-progress turn to attach to. The probe is
-        // robust (every failure mode → 'unknown' → no attach) so this
-        // block is fire-and-forget. Critical: only run for the live
-        // generation — otherwise a tab switch mid-load would attach to
-        // a stale session's stream and corrupt the active panel's
-        // message list (the original "I see the same message twice"
-        // shape, just from a different angle).
-        if (myGeneration !== loadGenerationRef.current) return
-        if (liveTurnReloadNonce === historyOnlyNonceRef.current) return
-        const turnUrl = buildChatTurnUrl(
-          API_URL!,
-          projectId,
-          localAgentUrl,
-          loadSessionId,
-          chatWorkspaceId,
-        )
-        void probeChatTurn({
-          url: turnUrl,
-          fetch: expoFetch,
-          headers: nativeHeaders ? nativeHeaders() : undefined,
-          credentials: Platform.OS === "web" ? "include" : undefined,
-          retryDelaysMs: [1000, 3000],
-        }).then((turn) => {
-          if (myGeneration !== loadGenerationRef.current) return
-          lastLiveTurnCheckAtRef.current = Date.now()
-          const expectedLive = liveTurnExpectedRef.current
-          liveTurnExpectedRef.current = false
-          // A turn this window stopped is not a turn to attach to, even while
-          // the runtime still reports it (stop reaches it a beat later).
-          const stopped = turn.turnId !== null && turn.turnId === stoppedTurnIdRef.current
-          if (isLiveTurnOtherThan(turn, stoppedTurnIdRef.current)) {
-            guardedAutoResumeStream("live-turn-probe")
-          } else if (expectedLive && !stopped) {
-            setTimeout(
-              () => reloadAndAttachLiveTurnRef.current({ settle: false }),
-              750,
-            )
-          }
-        })
-      })
+    void loadFirstPage(loadSessionId, myGeneration)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     isActive,
@@ -5331,6 +5797,7 @@ const ChatPanelContent = observer(function ChatPanelContent({
     isLoadingMessages,
     isStreaming,
     liveTurnReloadNonce,
+    historyHydrationTick,
   ])
 
   // This chat's last-used model: the most recent loaded message carrying a
@@ -5463,7 +5930,8 @@ const ChatPanelContent = observer(function ChatPanelContent({
       }
 
       cachedMessagesRef.current = paint.messages as any[]
-      sessionMessageCache.set(currentSessionId, paint.messages as any[])
+      writeSessionMessageCache(currentSessionId, paint.messages as any[])
+      persistProjectHistoryRef.current?.(currentSessionId, paint.messages as any[])
       setMessages(paint.messages as any[])
       if (!paint.carriedLiveReply) liveReplySessionRef.current = null
       historyPaintAttemptRef.current = 0
@@ -7465,6 +7933,25 @@ const ChatPanelContent = observer(function ChatPanelContent({
   // Note: reuses the existing `messagesRef` declared near the top of
   // the component (right after the `useChat` setup) so we don't
   // duplicate the ref-update side effect.
+  // A truncation is a deletion, so every copy a later delta or paint merges
+  // from has to shrink with the transcript. Leaving the tail in the panel cache
+  // and the device store lets the next delta paint the rows the server just
+  // deleted straight back — a delta cannot carry a deletion, so the stored
+  // cursor goes too and the next open reads the full page (SHO-260).
+  const forgetTruncatedHistory = useCallback(
+    (sessionId: string | null, keep: any[]) => {
+      cachedMessagesRef.current = keep
+      lastNonEmptyMessagesRef.current = keep
+      if (!sessionId) return
+      writeSessionMessageCache(sessionId, keep)
+      const key = historyKeyFor(sessionId)
+      if (!key) return
+      historyMetaRef.current.delete(key)
+      void removeChatHistory("project", key).catch(() => {})
+    },
+    [historyKeyFor],
+  )
+
   const truncateAndResend = useCallback(
     async (
       messageId: string,
@@ -7486,7 +7973,8 @@ const ChatPanelContent = observer(function ChatPanelContent({
       // If the truncate itself fails nothing was deleted server-side, so the
       // whole transcript comes back and the editor reopens with the draft.
       const previous = current
-      setMessages(current.slice(0, idx))
+      const kept = current.slice(0, idx)
+      setMessages(kept)
       let truncated = false
 
       // Step 1: chat truncation. This is the source of truth — if it
@@ -7495,6 +7983,7 @@ const ChatPanelContent = observer(function ChatPanelContent({
       try {
         await truncateMessagesFrom(sessionMessages, messageId)
         truncated = true
+        forgetTruncatedHistory(currentSessionIdRef.current ?? null, kept)
       } catch (err) {
         console.error("[ChatPanel] truncate-from failed:", err)
         setMessages(previous)
@@ -7544,7 +8033,7 @@ const ChatPanelContent = observer(function ChatPanelContent({
 
       await sendMessageInternal(newContent, newFiles)
     },
-    [sessionMessages, setMessages, sendMessageInternal],
+    [sessionMessages, setMessages, sendMessageInternal, forgetTruncatedHistory],
   )
 
   const handleEditMessage = useCallback(
@@ -7704,6 +8193,9 @@ const ChatPanelContent = observer(function ChatPanelContent({
       if (!sessionMessages) return
       const previous = feedbackMap[messageId]
       setFeedbackMap((prev) => ({ ...prev, [messageId]: thumbs }))
+      if (currentSessionId) {
+        patchSessionFeedbackCache(currentSessionId, messageId, thumbs)
+      }
       try {
         await setMessageFeedback(sessionMessages, messageId, thumbs)
       } catch (err) {
@@ -7714,10 +8206,13 @@ const ChatPanelContent = observer(function ChatPanelContent({
           else delete next[messageId]
           return next
         })
+        if (currentSessionId) {
+          patchSessionFeedbackCache(currentSessionId, messageId, previous ?? null)
+        }
         throw err
       }
     },
-    [sessionMessages, feedbackMap],
+    [sessionMessages, feedbackMap, currentSessionId],
   )
 
   const handleClearFeedback = useCallback(
@@ -7729,17 +8224,23 @@ const ChatPanelContent = observer(function ChatPanelContent({
         delete next[messageId]
         return next
       })
+      if (currentSessionId) {
+        patchSessionFeedbackCache(currentSessionId, messageId, null)
+      }
       try {
         await clearMessageFeedback(sessionMessages, messageId)
       } catch (err) {
         console.error("[ChatPanel] Failed to clear message feedback:", err)
         if (previous) {
           setFeedbackMap((prev) => ({ ...prev, [messageId]: previous }))
+          if (currentSessionId) {
+            patchSessionFeedbackCache(currentSessionId, messageId, previous)
+          }
         }
         throw err
       }
     },
-    [sessionMessages, feedbackMap],
+    [sessionMessages, feedbackMap, currentSessionId],
   )
 
   // Fork the current session at `messageId` into a brand-new session, then

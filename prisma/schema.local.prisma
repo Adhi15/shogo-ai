@@ -1538,6 +1538,10 @@ model ChatMessage {
   imageData String?
   parts     String?
   createdAt DateTime @default(now())
+  /// Last write to this row. Assistant rows are updated in place while they
+  /// stream, so `createdAt` alone cannot tell a client what changed since its
+  /// last visit. Powers GET /api/chat-messages/session/:id/changes (SHO-260).
+  updatedAt DateTime @default(now()) @updatedAt
   /// Which agent authored this row. "technical" (default, legacy rows) or
   /// "voice" (EZ Mode translator overlay thread).
   agent     String   @default("technical")
@@ -1554,6 +1558,7 @@ model ChatMessage {
   @@index([sessionId])
   @@index([sessionId, createdAt])
   @@index([sessionId, agent, createdAt])
+  @@index([sessionId, updatedAt])
   @@index([authorUserId, createdAt])
   @@map("chat_messages")
 }
