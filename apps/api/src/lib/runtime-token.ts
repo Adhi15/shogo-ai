@@ -50,6 +50,7 @@
  */
 
 import { createHmac } from 'crypto'
+import { assertMintableSigningSecret, DEV_ONLY_SIGNING_SECRET } from './signing-secret-guard'
 import { safeTokenEqual } from './crypto-util'
 
 export function getSigningSecret(): string {
@@ -66,7 +67,7 @@ export function getSigningSecret(): string {
     )
   }
 
-  return 'shogo-dev-only-runtime-token-secret'
+  return DEV_ONLY_SIGNING_SECRET
 }
 
 /**
@@ -89,7 +90,11 @@ const HMAC_HEX_RE = /^[0-9a-f]{64}$/
  * format) or `verifyRuntimeToken` (format-agnostic).
  */
 function deriveRuntimeTokenHmac(projectId: string): string {
-  return createHmac('sha256', getSigningSecret())
+  return hmacFor(projectId, getSigningSecret())
+}
+
+function hmacFor(projectId: string, secret: string): string {
+  return createHmac('sha256', secret)
     .update(`runtime-auth:${projectId}`)
     .digest('hex')
 }
@@ -111,7 +116,9 @@ export function deriveRuntimeToken(projectId: string): string {
   if (!projectId) {
     throw new Error('[RuntimeToken] deriveRuntimeToken: projectId is required')
   }
-  return `${RUNTIME_TOKEN_V1_PREFIX}${projectId}_${deriveRuntimeTokenHmac(projectId)}`
+  const secret = getSigningSecret()
+  assertMintableSigningSecret(secret)
+  return `${RUNTIME_TOKEN_V1_PREFIX}${projectId}_${hmacFor(projectId, secret)}`
 }
 
 /**
